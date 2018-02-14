@@ -115,6 +115,7 @@ class WeeklyData:
                 if idx == 0:
                     volume_list.append(hourly_volume_to)
                 else:
+                    volume_list.append(hourly_volume_to)
                     volume_to_i_1 = hourly_volume_to
                     volume_to_i_0 = volume_list[idx-1]
                     hourly_relative_volume_change = (volume_to_i_1 - volume_to_i_0) / volume_to_i_0
