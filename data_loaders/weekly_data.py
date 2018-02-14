@@ -62,7 +62,7 @@ class WeeklyData:
                     continue
 
                 for _, row in interest_over_time_df.iterrows():
-                    currency_dict['i_o_t_' + country + '_' + str(counter)] = row[currency_name]
+                    currency_dict['i_o_t_' + country + '_' + str(counter).zfill(4)] = row[currency_name]
                     counter += 1
 
             self.crypto_currencies.append(currency_dict)
@@ -76,7 +76,6 @@ class WeeklyData:
             currency_symbol = currency['symbol']
 
             print('Hourly price historical: \n Currency: {}, {} '.format(currency_name, currency_symbol))
-
 
             currency_idx = self.get_index_of_crypto_currency_in_list(currency_name)
 
@@ -96,21 +95,36 @@ class WeeklyData:
                         len(historical_data_points)))
                 continue
 
+            volume_list = []
+
             for idx, historical_data in enumerate(historical_data_points):
                 hourly_closing_price = historical_data['close']
                 hourly_opening_price = historical_data['open']
+                hourly_volume_to = historical_data['volumeto']
 
                 if not hourly_closing_price:
                     hourly_closing_price = 0
 
                 if not hourly_opening_price:
-                    hourly_opening_price = 0.1
+                    hourly_opening_price = 0.01
 
-                # close - open/ open
+                if not hourly_volume_to:
+                    hourly_volume_to = 0.01
+
+                # (volumeTo_i+1 - volumeTo_i) / volumeTo_i
+                if idx == 0:
+                    volume_list.append(hourly_volume_to)
+                else:
+                    volume_to_i_1 = hourly_volume_to
+                    volume_to_i_0 = volume_list[idx-1]
+                    hourly_relative_volume_change = (volume_to_i_1 - volume_to_i_0) / volume_to_i_0
+                    self.crypto_currencies[currency_idx]['h_r_v_c'+str(idx-1).zfill(4)] = hourly_relative_volume_change
+
+                # close - open / open
                 hourly_relative_change = (hourly_closing_price - hourly_opening_price) / hourly_opening_price
 
-                self.crypto_currencies[currency_idx]['close_'+str(idx)] = hourly_closing_price
-                self.crypto_currencies[currency_idx]['h_r_c'+str(idx)] = hourly_relative_change
+                self.crypto_currencies[currency_idx]['close_'+str(idx).zfill(4)] = hourly_closing_price
+                self.crypto_currencies[currency_idx]['h_r_c'+str(idx).zfill(4)] = hourly_relative_change
 
     @staticmethod
     def create_crypto_compare_time_stamp(hour):
