@@ -97,8 +97,20 @@ class WeeklyData:
                 continue
 
             for idx, historical_data in enumerate(historical_data_points):
-                hourly_closing_price = historical_data['close'] or 0
+                hourly_closing_price = historical_data['close']
+                hourly_opening_price = historical_data['open']
+
+                if not hourly_closing_price:
+                    hourly_closing_price = 0
+
+                if not hourly_opening_price:
+                    hourly_opening_price = 0.1
+
+                # close - open/ open
+                hourly_relative_change = (hourly_closing_price - hourly_opening_price) / hourly_opening_price
+
                 self.crypto_currencies[currency_idx]['close_'+str(idx)] = hourly_closing_price
+                self.crypto_currencies[currency_idx]['h_r_c'+str(idx)] = hourly_relative_change
 
     @staticmethod
     def create_crypto_compare_time_stamp(hour):
