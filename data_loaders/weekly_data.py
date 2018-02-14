@@ -28,7 +28,8 @@ class WeeklyData:
         self.create_hourly_price_historical()
 
         df = pd.DataFrame(self.crypto_currencies)
-        df.to_csv('interest_over_time.csv')
+        #df = df.fillna(0)
+        df.to_csv('crypto_data.csv')
         print(self.crypto_currencies[0])
 
     def create_interest_over_time_columns(self):
@@ -37,7 +38,7 @@ class WeeklyData:
         for currency in self.top_x_market_cap_currencies:
             currency_name = currency['name']
 
-            interest_over_time_dict = {
+            currency_dict = {
                 'name': currency_name
             }
 
@@ -61,10 +62,10 @@ class WeeklyData:
                     continue
 
                 for _, row in interest_over_time_df.iterrows():
-                    interest_over_time_dict['i_o_t_' + country + '_' + str(counter)] = row[currency_name]
+                    currency_dict['i_o_t_' + country + '_' + str(counter)] = row[currency_name]
                     counter += 1
 
-                self.crypto_currencies.append(interest_over_time_dict)
+            self.crypto_currencies.append(currency_dict)
 
     def create_hourly_price_historical(self, comparison_symbol='USD', limit=167, bin_width=1):
 
