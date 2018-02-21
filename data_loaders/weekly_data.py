@@ -5,6 +5,8 @@ import time
 import pandas as pd
 import requests
 import calendar
+import urllib.request
+import json
 
 pytrend = TrendReq(hl='en-US', tz=360)
 
@@ -12,7 +14,7 @@ pytrend = TrendReq(hl='en-US', tz=360)
 class WeeklyData:
     top_x_market_cap_currencies = []
     crypto_currencies = []
-    country_list = ['US', 'CA', 'SG', 'CN']#[, 'JP', 'KR', 'IN', 'GB', 'DE', 'FR', 'ZA', 'GH', 'NG', 'AU', 'VE', 'BR', 'KE']
+    country_list = ['US', 'CA', 'SG', 'CN', 'JP', 'KR', 'IN', 'GB', 'DE', 'FR', 'ZA', 'GH', 'NG', 'AU', 'VE', 'BR', 'KE', 'RU']
 
     def __init__(self, hour='10'):
         self.hour = hour
@@ -26,11 +28,12 @@ class WeeklyData:
         # Must start with interest over time columns
         self.create_interest_over_time_columns()
         self.create_hourly_price_historical()
+        self.create_daily_twitter_data()
 
         df = pd.DataFrame(self.crypto_currencies)
         #df = df.fillna(0)
+        #print(self.crypto_currencies[0])
         df.to_csv('crypto_data.csv')
-        print(self.crypto_currencies[0])
 
     def create_interest_over_time_columns(self):
         print('Interest Over Time:')
@@ -126,6 +129,57 @@ class WeeklyData:
 
                 self.crypto_currencies[currency_idx]['close_'+str(idx).zfill(4)] = hourly_closing_price
                 self.crypto_currencies[currency_idx]['h_r_c'+str(idx).zfill(4)] = hourly_relative_change
+
+    def create_daily_twitter_data(self):
+        rite_kit_api_client_key = '775323db6d69156ba811ce88d0e8b3a073b979148e5c'
+        api_endpoint_url = 'https://api.ritekit.com/v1/stats/history/{}?client_id={}'
+
+        for currency in self.top_x_market_cap_currencies:
+            currency_name = currency['name']
+
+            print('Twitter : \n Currency: {} '.format(currency_name))
+
+            response = urllib.request.urlopen(api_endpoint_url.format(currency_name, rite_kit_api_client_key))
+            json_response = json.load(response)
+
+            #status_code = json_response['code']
+            response_data = json_response['data']
+
+            if not response_data:
+                continue
+
+            now = datetime.now()
+
+            for hashtag_daily_data in response_data:
+                day_string = hashtag_daily_data['date']
+                datetime_object = datetime.strptime(day_string, '%Y-%m-%d')
+                delta = now - datetime_object
+                num_days_ago = delta.days
+
+                if num_days_ago <= 7:
+                    currency_idx = self.get_index_of_crypto_currency_in_list(currency_name)
+
+                    num_tweets = hashtag_daily_data['tweets']
+                    num_retweets = hashtag_daily_data['retweets']
+                    exposure = hashtag_daily_data['exposure']
+
+                    if not num_tweets:
+                        num_tweets = 0
+
+                    if not num_retweets:
+                        num_retweets = 0
+
+                    if not exposure:
+                        exposure = 0
+
+                    reversed_number = abs(num_days_ago - 7)
+                    tweet_name = 'tweets_{}'.format(reversed_number)
+                    retweets_name = 'retweets_{}'.format(reversed_number)
+                    exposure_name = 'exposure_{}'.format(reversed_number)
+
+                    self.crypto_currencies[currency_idx][tweet_name] = num_tweets
+                    self.crypto_currencies[currency_idx][retweets_name] = num_retweets
+                    self.crypto_currencies[currency_idx][exposure_name] = exposure
 
     @staticmethod
     def create_crypto_compare_time_stamp(hour):
