@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib
+
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -11,16 +12,16 @@ from sklearn.model_selection import train_test_split
 from datetime import datetime, timedelta
 from sklearn.ensemble import *
 
-#import seaborn as sns # Only used for heatmap
-#sns.set()
+
+# import seaborn as sns # Only used for heatmap
+# sns.set()
 
 
 class CurrencyPredictor:
-
     x = None
     y = None
 
-    x_df = None # Data frame of x - features (instead of numpy array)
+    x_df = None  # Data frame of x - features (instead of numpy array)
 
     classifiers = {
         'LinearRegression': LinearRegression(),
@@ -92,21 +93,23 @@ class CurrencyPredictor:
         for sum_dict in self.summary:
             name = sum_dict['name'] + '_forecast'
             self.df_copy[name] = sum_dict['forecast']
-            self.df_copy['close'].plot(figsize=(12, 6), label='Close (actual value)', title='Prediction period: {} hour'.format(self.prediction_period))
+            self.df_copy['close'].plot(figsize=(12, 6), label='Close (actual value)',
+                                       title='Currency: {}, Prediction period: {} hour'.format(self.currency,
+                                                                                               self.prediction_period))
             self.df_copy[name].plot(figsize=(12, 6), label=name)
 
             plt.legend()
             plt.show()
 
-    #def plot_heat_map(self):
-        # predictions = [(sum_dict['prediction'], sum_dict['name']) for sum_dict in summary]
-        # names = [x[1] for x in predictions] + ['test']
-        #
-        # stack_predict = np.vstack([x[0] for x in predictions] + [test_Y]).T
-        # corr_df = pd.DataFrame(stack_predict, columns=names)
-        # plt.figure(figsize=(10,5))
-        # sns.heatmap(corr_df.corr(), annot=True)
-        # plt.show()
+            # def plot_heat_map(self):
+            # predictions = [(sum_dict['prediction'], sum_dict['name']) for sum_dict in summary]
+            # names = [x[1] for x in predictions] + ['test']
+            #
+            # stack_predict = np.vstack([x[0] for x in predictions] + [test_Y]).T
+            # corr_df = pd.DataFrame(stack_predict, columns=names)
+            # plt.figure(figsize=(10,5))
+            # sns.heatmap(corr_df.corr(), annot=True)
+            # plt.show()
 
     def create_labels_based_on_prediction_period(self):
         """
@@ -118,8 +121,8 @@ class CurrencyPredictor:
         """
         self.df['Price_After_period'] = self.df['close'].shift(-self.prediction_period)
         self.df['Price_After_period'].fillna(0, inplace=True)
-        #print(self.df['Price_After_period'])
-        #exit()
+        # print(self.df['Price_After_period'])
+        # exit()
         print(self.df['Price_After_period'].values.shape)
         self.df.drop(self.df.tail(1).index, inplace=True)
         self.x_df = self.df.drop('Price_After_period', axis=1)
@@ -221,5 +224,5 @@ class CurrencyPredictor:
 
 
 if __name__ == '__main__':
-    currency_predictor = CurrencyPredictor('Ethereum', create_single_currency_data_set=True, prediction_period=2)
+    currency_predictor = CurrencyPredictor('Bitcoin', create_single_currency_data_set=True, prediction_period=1)
     currency_predictor.plot_predictions()
