@@ -18,7 +18,7 @@ class WeeklyData:
 
     def __init__(self, hour='10'):
         self.hour = hour
-        self.top_x_market_cap_currencies = get_top_x_market_cap(1)
+        self.top_x_market_cap_currencies = get_top_x_market_cap(25)
         self.trends_time_frame = self.create_trends_time_frame(num_days=7, hour=self.hour)
         self.crypto_compare_time_stamp = self.create_crypto_compare_time_stamp(hour=self.hour)
 
@@ -33,7 +33,7 @@ class WeeklyData:
         df = pd.DataFrame(self.crypto_currencies)
         #df = df.fillna(0)
         #print(self.crypto_currencies[0])
-        df.to_csv('crypto_data.csv')
+        df.to_csv('crypto_data.csv', index=False)
         self.write_index_explanations(df)
 
     def create_interest_over_time_columns(self):
