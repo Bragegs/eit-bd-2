@@ -34,6 +34,7 @@ class WeeklyData:
         #df = df.fillna(0)
         #print(self.crypto_currencies[0])
         df.to_csv('crypto_data.csv')
+        self.write_index_explanations(df)
 
     def create_interest_over_time_columns(self):
         print('Interest Over Time:')
@@ -98,12 +99,13 @@ class WeeklyData:
                         len(historical_data_points)))
                 continue
 
-            volume_list = []
-
             for idx, historical_data in enumerate(historical_data_points):
                 hourly_closing_price = historical_data['close']
                 hourly_opening_price = historical_data['open']
                 hourly_volume_to = historical_data['volumeto']
+                hourly_volume_from = historical_data['volumefrom']
+                hourly_high = historical_data['high']
+                hourly_low = historical_data['low']
 
                 if not hourly_closing_price:
                     hourly_closing_price = 0
@@ -114,21 +116,12 @@ class WeeklyData:
                 if not hourly_volume_to:
                     hourly_volume_to = 0.01
 
-                # (volumeTo_i+1 - volumeTo_i) / volumeTo_i
-                if idx == 0:
-                    volume_list.append(hourly_volume_to)
-                else:
-                    volume_list.append(hourly_volume_to)
-                    volume_to_i_1 = hourly_volume_to
-                    volume_to_i_0 = volume_list[idx-1]
-                    hourly_relative_volume_change = (volume_to_i_1 - volume_to_i_0) / volume_to_i_0
-                    self.crypto_currencies[currency_idx]['h_r_v_c'+str(idx-1).zfill(4)] = hourly_relative_volume_change
-
-                # close - open / open
-                hourly_relative_change = (hourly_closing_price - hourly_opening_price) / hourly_opening_price
-
                 self.crypto_currencies[currency_idx]['close_'+str(idx).zfill(4)] = hourly_closing_price
-                self.crypto_currencies[currency_idx]['h_r_c'+str(idx).zfill(4)] = hourly_relative_change
+                self.crypto_currencies[currency_idx]['open_'+str(idx).zfill(4)] = hourly_opening_price
+                self.crypto_currencies[currency_idx]['high_'+str(idx).zfill(4)] = hourly_high
+                self.crypto_currencies[currency_idx]['low_'+str(idx).zfill(4)] = hourly_low
+                self.crypto_currencies[currency_idx]['volume_to_'+str(idx).zfill(4)] = hourly_volume_to
+                self.crypto_currencies[currency_idx]['volume_from_'+str(idx).zfill(4)] = hourly_volume_from
 
     def create_daily_twitter_data(self):
         rite_kit_api_client_key = '775323db6d69156ba811ce88d0e8b3a073b979148e5c'
@@ -207,6 +200,32 @@ class WeeklyData:
 
         return -1
 
+    @staticmethod
+    def write_index_explanations(df):
+        header_list = list(df)
+        header_list_wo_numbers = [''.join([x for x in word if not x.isdigit()]) for word in header_list]
+        header_list_wo_number_wo_duplicates = sorted(list(set(header_list_wo_numbers)))
+
+        with open('column_explanation.csv', 'w') as file:
+            file.write('sep=,')
+            file.write('\n')
+            file.write('header, start_column, end_column')
+
+            csv_column_count = 0
+
+            for unique_header in header_list_wo_number_wo_duplicates:
+                file.write('\n')
+
+                # Minus 1 because of 0-index
+                how_many_times_repeated_in_header = header_list_wo_numbers.count(unique_header)
+                if csv_column_count == 0:
+                    how_many_times_repeated_in_header -= 1
+
+                start_column = csv_column_count
+                end_column = csv_column_count + how_many_times_repeated_in_header
+                file.write('{}, {}, {}'.format(unique_header, start_column, end_column))
+
+                csv_column_count += how_many_times_repeated_in_header + 1
 
 if __name__ == '__main__':
     weekly_data = WeeklyData(hour='10')
