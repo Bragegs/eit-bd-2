@@ -18,7 +18,7 @@ class WeeklyData:
 
     def __init__(self, hour='10'):
         self.hour = hour
-        self.top_x_market_cap_currencies = get_top_x_market_cap(25)
+        self.top_x_market_cap_currencies = get_top_x_market_cap(1)
         self.trends_time_frame = self.create_trends_time_frame(num_days=7, hour=self.hour)
         self.crypto_compare_time_stamp = self.create_crypto_compare_time_stamp(hour=self.hour)
 
@@ -217,9 +217,7 @@ class WeeklyData:
                 file.write('\n')
 
                 # Minus 1 because of 0-index
-                how_many_times_repeated_in_header = header_list_wo_numbers.count(unique_header)
-                if csv_column_count == 0:
-                    how_many_times_repeated_in_header -= 1
+                how_many_times_repeated_in_header = header_list_wo_numbers.count(unique_header) - 1
 
                 start_column = csv_column_count
                 end_column = csv_column_count + how_many_times_repeated_in_header
