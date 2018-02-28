@@ -160,7 +160,7 @@ class CurrencyPredictor:
             now = now + timedelta(hours=1)
             date_dict[str(now)] = {}
 
-        counter = 0
+        hour_counter = 0
 
         country_list = ['US', 'CA', 'SG', 'CN', 'JP', 'KR', 'IN', 'GB', 'DE', 'FR', 'ZA', 'GH', 'NG', 'AU', 'VE', 'BR',
                         'KE',
@@ -169,41 +169,44 @@ class CurrencyPredictor:
         for key, val in date_dict.items():
             new_dict = {}
 
-            new_dict['close'] = currency_dict['close_{}'.format(str(counter).zfill(4))]
-
-            new_dict['hourly_relative_change'] = currency_dict['h_r_c{}'.format(str(counter).zfill(4))]
+            new_dict['close'] = currency_dict['close_{}'.format(str(hour_counter).zfill(4))]
+            new_dict['open'] = currency_dict['open_{}'.format(str(hour_counter).zfill(4))]
+            new_dict['high'] = currency_dict['high_{}'.format(str(hour_counter).zfill(4))]
+            new_dict['low'] = currency_dict['low_{}'.format(str(hour_counter).zfill(4))]
+            new_dict['volume_to'] = currency_dict['volume_to_{}'.format(str(hour_counter).zfill(4))]
+            new_dict['volume_from'] = currency_dict['volume_from_{}'.format(str(hour_counter).zfill(4))]
 
             for country in country_list:
-                if 'i_o_t_{}_{}'.format(country, str(counter).zfill(4)) in currency_dict:
+                if 'i_o_t_{}_{}'.format(country, str(hour_counter).zfill(4)) in currency_dict:
                     new_dict['interest_over_time_{}'.format(country)] = currency_dict[
-                        'i_o_t_{}_{}'.format(country, str(counter).zfill(4))]
+                        'i_o_t_{}_{}'.format(country, str(hour_counter).zfill(4))]
 
-            if counter < 24:
+            if hour_counter < 24:
                 new_dict['num_tweets'] = currency_dict['tweets_{}'.format(0)]
                 new_dict['num_retweets'] = currency_dict['retweets_{}'.format(0)]
                 new_dict['tweet_exposure'] = currency_dict['retweets_{}'.format(0)]
 
-            elif 24 < counter < 48:
+            elif 24 < hour_counter < 48:
                 new_dict['num_tweets'] = currency_dict['tweets_{}'.format(1)]
                 new_dict['num_retweets'] = currency_dict['retweets_{}'.format(1)]
                 new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(1)]
 
-            elif 48 < counter < 72:
+            elif 48 < hour_counter < 72:
                 new_dict['num_tweets'] = currency_dict['tweets_{}'.format(2)]
                 new_dict['num_retweets'] = currency_dict['retweets_{}'.format(2)]
                 new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(2)]
 
-            elif 72 < counter < 96:
+            elif 72 < hour_counter < 96:
                 new_dict['num_tweets'] = currency_dict['tweets_{}'.format(3)]
                 new_dict['num_retweets'] = currency_dict['retweets_{}'.format(3)]
                 new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(3)]
 
-            elif 96 < counter < 120:
+            elif 96 < hour_counter < 120:
                 new_dict['num_tweets'] = currency_dict['tweets_{}'.format(4)]
                 new_dict['num_retweets'] = currency_dict['retweets_{}'.format(4)]
                 new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(4)]
 
-            elif 128 < counter < 144:
+            elif 128 < hour_counter < 144:
                 new_dict['num_tweets'] = currency_dict['tweets_{}'.format(5)]
                 new_dict['num_retweets'] = currency_dict['retweets_{}'.format(5)]
                 new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(5)]
@@ -213,11 +216,8 @@ class CurrencyPredictor:
                 new_dict['num_retweets'] = currency_dict['retweets_{}'.format(6)]
                 new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(6)]
 
-            if counter < 167:
-                new_dict['hourly_relative_volume_change'] = currency_dict['h_r_v_c{}'.format(str(counter).zfill(4))]
-
             new_dict['date'] = key
-            counter += 1
+            hour_counter += 1
             list_of_dicts.append(new_dict)
 
         return pd.DataFrame(list_of_dicts)
