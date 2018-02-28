@@ -142,7 +142,7 @@ class CurrencyPredictor:
 
     @staticmethod
     def create_data_frame_for_currency(currency):
-        df = pd.read_csv('./crypto_data.csv')  # , parse_dates=['date'], index_col='date'
+        df = pd.read_csv('./csv_files/crypto_data.csv')  # , parse_dates=['date'], index_col='date'
 
         # df.drop(['name'], axis=1, inplace=True)
         headers = list(df.drop(['name'], axis=1, inplace=False))
