@@ -16,9 +16,12 @@ class WeeklyData:
     crypto_currencies = []
     country_list = ['US', 'CA', 'SG', 'CN', 'JP', 'KR', 'IN', 'GB', 'DE', 'FR', 'ZA', 'GH', 'NG', 'AU', 'VE', 'BR', 'KE', 'RU']
 
-    def __init__(self, hour='10'):
+    def __init__(self, week, num_top_market_currencies, hour='8'):
         self.hour = hour
-        self.top_x_market_cap_currencies = get_top_x_market_cap(25)
+        self.week = week
+        self.num_top_market_currencies = num_top_market_currencies
+
+        self.top_x_market_cap_currencies = get_top_x_market_cap(self.num_top_market_currencies)
         self.trends_time_frame = self.create_trends_time_frame(num_days=7, hour=self.hour)
         self.crypto_compare_time_stamp = self.create_crypto_compare_time_stamp(hour=self.hour)
 
@@ -33,7 +36,7 @@ class WeeklyData:
         df = pd.DataFrame(self.crypto_currencies)
         #df = df.fillna(0)
         #print(self.crypto_currencies[0])
-        df.to_csv('crypto_data.csv', index=False)
+        df.to_csv('crypto_data_week_{}.csv'.format(self.week), index=False)
         self.write_index_explanations(df)
 
     def create_interest_over_time_columns(self):
@@ -226,5 +229,9 @@ class WeeklyData:
                 csv_column_count += how_many_times_repeated_in_header + 1
 
 if __name__ == '__main__':
-    weekly_data = WeeklyData(hour='10')
+
+    current_week = datetime.now().isocalendar()[1]
+    last_week = current_week - 1
+
+    weekly_data = WeeklyData(week=str(last_week), num_top_market_currencies=1, hour='8')
     weekly_data.create_data_set()
