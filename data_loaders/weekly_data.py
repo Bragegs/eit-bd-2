@@ -1,4 +1,5 @@
 from pytrends.request import TrendReq
+from pytrends.exceptions import ResponseError as PytrendsError
 from data_loaders.market_cap import get_top_x_market_cap
 from datetime import datetime, timedelta
 import time
@@ -54,10 +55,27 @@ class WeeklyData:
                                                                                                 self.trends_time_frame))
                 time.sleep(1)
 
-                pytrend.build_payload([currency_name], timeframe=self.trends_time_frame, geo=country, gprop='')
+                try:
+                    pytrend.build_payload([currency_name], timeframe=self.trends_time_frame, geo=country, gprop='')
+                    # Interest Over Time
+                    interest_over_time_df = pytrend.interest_over_time()
+                except (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout) as e:
+                    print('Waiting 10 seconds before retrying to build payload')
+                    time.sleep(10)
+                    r = requests.get('http://jsonip.com')
+                    current_ip = r.json()['ip']
+                    print('Current public IP is {}'.format(current_ip))
+                    pytrend.build_payload([currency_name], timeframe=self.trends_time_frame, geo=country, gprop='')
+                    interest_over_time_df = pytrend.interest_over_time()
+                except PytrendsError as e:
+                    print('MAX limit reach on google trends. Retrying in 60 seconds')
+                    time.sleep(60)
+                    r = requests.get('http://jsonip.com')
+                    current_ip = r.json()['ip']
+                    print('Current public IP is {}'.format(current_ip))
+                    pytrend.build_payload([currency_name], timeframe=self.trends_time_frame, geo=country, gprop='')
+                    interest_over_time_df = pytrend.interest_over_time()
 
-                # Interest Over Time
-                interest_over_time_df = pytrend.interest_over_time()
                 counter = 0
 
                 if interest_over_time_df.shape[0] != 168:
@@ -138,7 +156,6 @@ class WeeklyData:
             response = urllib.request.urlopen(api_endpoint_url.format(currency_name, rite_kit_api_client_key))
             json_response = json.load(response)
 
-            #status_code = json_response['code']
             response_data = json_response['data']
 
             if not response_data:
@@ -229,9 +246,8 @@ class WeeklyData:
                 csv_column_count += how_many_times_repeated_in_header + 1
 
 if __name__ == '__main__':
-
     current_week = datetime.now().isocalendar()[1]
     last_week = current_week - 1
 
-    weekly_data = WeeklyData(week=str(last_week), num_top_market_currencies=1, hour='8')
+    weekly_data = WeeklyData(week=str(last_week), num_top_market_currencies=150, hour='8')
     weekly_data.create_data_set()
