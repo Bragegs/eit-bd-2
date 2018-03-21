@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib
+import csv
+import os
 
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -32,11 +34,28 @@ class CurrencyPredictor:
 
     }
 
+    # TODO: Load automagically from column explanation.py
+    all_headers = [
+        'close', 'date', 'high', 'interest_over_time_AU', 'interest_over_time_BR', 'interest_over_time_CA',
+        'interest_over_time_DE', 'interest_over_time_FR', 'interest_over_time_GB', 'interest_over_time_GH',
+        'interest_over_time_IN', 'interest_over_time_JP', 'interest_over_time_KE', 'interest_over_time_KR',
+        'interest_over_time_NG', 'interest_over_time_RU', 'interest_over_time_SG', 'interest_over_time_US',
+        'interest_over_time_VE', 'interest_over_time_ZA',  'interest_over_time_CN', 'low', 'num_retweets',
+        'num_tweets', 'open','tweet_exposure', 'volume_from', 'volume_to'
+    ]
+
+    headers_to_remove = ['interest_over_time_US',
+                         'interest_over_time_KE',
+                         'interest_over_time_KR',
+                         'interest_over_time_NG']
+
     summary = list()
     num_days_of_data = None
 
-    image_dir = './images'
+    image_dir = os.path.dirname(os.path.abspath(__file__)) + '/images'
     start_time_date = None
+
+    csv_dir = os.path.dirname(os.path.abspath(__file__)) + '/csv_files'
 
     def __init__(self, currency,
                  data_files,
@@ -50,16 +69,22 @@ class CurrencyPredictor:
         self.data_files = data_files
         self.num_days_of_data = len(data_files) * 7
         self.start_time_date = start_time_date
+        self.image_dir += '/{}'.format(currency)
+
+        if not os.path.isdir(self.image_dir):
+            os.makedirs(self.image_dir)
 
         if create_single_currency_data_set:
             #  We have to create the data set
             self.df = self.create_data_frame_for_currency(self.currency, self.data_files)
+            self.df = self.drop_unwanted_headers(self.df)
             self.df.fillna(0.0, inplace=True)
-            self.df.to_csv('./csv_files/{}.csv'.format(self.currency), index=False)
-            self.df = pd.read_csv('./csv_files/{}.csv'.format(self.currency), parse_dates=['date'], index_col='date')
+            self.df.to_csv('{}/{}.csv'.format(self.csv_dir, self.currency), index=False)
+            self.df = pd.read_csv('{}/{}.csv'.format(self.csv_dir, self.currency), parse_dates=['date'], index_col='date')
         else:
             #  The data set is already created
-            self.df = pd.read_csv('./csv_files/{}.csv'.format(self.currency), parse_dates=['date'], index_col='date')
+            self.df = pd.read_csv('{}/{}.csv'.format(self.csv_dir, self.currency), parse_dates=['date'], index_col='date')
+            self.df = self.drop_unwanted_headers(self.df)
 
         self.normalize_currency_data_set()
         self.create_labels_based_on_prediction_period()
@@ -123,7 +148,7 @@ class CurrencyPredictor:
                                                                                                self.prediction_period))
             self.df_copy[name].plot(figsize=(12, 6), label=name)
             plt.legend()
-            plt.savefig('./{}/{}_{}.png'.format(self.image_dir, name, self.currency), bbox_inches='tight')
+            plt.savefig('{}/{}_{}.png'.format(self.image_dir, name, self.currency), bbox_inches='tight')
             plt.gcf().clear()
             #exit()
             # plt.show()
@@ -137,7 +162,7 @@ class CurrencyPredictor:
         corr_df = pd.DataFrame(stack_predict, columns=names)
         plt.figure(figsize=(10,5))
         sns.heatmap(corr_df.corr(), annot=True)
-        plt.savefig('./{}/prediction_heatmap_{}.png'.format(self.image_dir, self.currency), bbox_inches='tight')
+        plt.savefig('{}/prediction_heatmap_{}.png'.format(self.image_dir, self.currency), bbox_inches='tight')
         plt.gcf().clear()
         # plt.show()
 
@@ -180,7 +205,7 @@ class CurrencyPredictor:
         self.df['close'].rolling(window=self.num_days_of_data).mean().plot(
             label='{} Day Avg'.format(self.num_days_of_data))
         plt.legend()
-        plt.savefig('./{}/avg_price_{}_days.png'.format(self.image_dir, self.num_days_of_data), bbox_inches='tight')
+        plt.savefig('{}/avg_price_{}_days.png'.format(self.image_dir, self.num_days_of_data), bbox_inches='tight')
         plt.gcf().clear()
         # plt.legend()
         # plt.show()
@@ -198,7 +223,7 @@ class CurrencyPredictor:
         for data_file in data_files:
             date_list = []
 
-            df = pd.read_csv('./csv_files/{}'.format(data_file))
+            df = pd.read_csv('{}/{}'.format(self.csv_dir, data_file))
 
             for j in range(168 * data_file_count, 168 * (data_file_count + 1)):
                 start_time_date = start_time_date + timedelta(hours=1)
@@ -290,6 +315,37 @@ class CurrencyPredictor:
 
         return list_of_currency_dicts
 
+    def drop_unwanted_headers(self, df):
+        for unwanted_header in self.headers_to_remove:
+            if unwanted_header in 'close' or unwanted_header in 'date':
+                print('Can not drop header: {}'.format(unwanted_header))
+                continue
+            df.drop(unwanted_header, axis=1, inplace=True)
+        return df
+
+    def write_result(self):
+        print('Writing results to result_log.csv')
+
+        results_path = self.csv_dir + '/results_log.csv'
+
+        result = {}
+
+        best_prediction_dict = currency_predictor.get_best_regressor()
+        result['Name'] = best_prediction_dict['name']
+        result['R2'] = best_prediction_dict['R2']
+        result['MAE'] = best_prediction_dict['MAE']
+        result['MSE'] = best_prediction_dict['MSE']
+        result['Accuracy'] = best_prediction_dict['accuracy']
+
+        result['Currency'] = self.currency
+        result['Removed_headers'] = self.headers_to_remove
+        result['Prediction_period'] = self.prediction_period
+        result['Data_files'] = self.data_files
+
+        results_df = pd.read_csv(results_path)
+        flags_df = pd.DataFrame([result])
+        concat_df = pd.concat([results_df, flags_df])
+        concat_df.to_csv(results_path, index=False)
 
 if __name__ == '__main__':
     data_files = ['crypto_data_week_9.csv', 'crypto_data_week_10.csv', 'crypto_data_week_11.csv']
@@ -314,3 +370,6 @@ if __name__ == '__main__':
     print('MSE: {0:.3f}'.format(best_prediction_dict['MSE']))
     print('{0:.3f}%'.format(best_prediction_dict['accuracy']))
     print(60*'*')
+
+    print()
+    currency_predictor.write_result()
