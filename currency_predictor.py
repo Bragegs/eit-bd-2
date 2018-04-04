@@ -34,21 +34,6 @@ class CurrencyPredictor:
 
     }
 
-    # TODO: Load automagically from column explanation.py
-    all_headers = [
-        'close', 'date', 'high', 'interest_over_time_AU', 'interest_over_time_BR', 'interest_over_time_CA',
-        'interest_over_time_DE', 'interest_over_time_FR', 'interest_over_time_GB', 'interest_over_time_GH',
-        'interest_over_time_IN', 'interest_over_time_JP', 'interest_over_time_KE', 'interest_over_time_KR',
-        'interest_over_time_NG', 'interest_over_time_RU', 'interest_over_time_SG', 'interest_over_time_US',
-        'interest_over_time_VE', 'interest_over_time_ZA',  'interest_over_time_CN', 'low', 'num_retweets',
-        'num_tweets', 'open','tweet_exposure', 'volume_from', 'volume_to'
-    ]
-
-    headers_to_remove = ['interest_over_time_US',
-                         'interest_over_time_KE',
-                         'interest_over_time_KR',
-                         'interest_over_time_NG']
-
     summary = list()
     num_days_of_data = None
 
@@ -61,7 +46,9 @@ class CurrencyPredictor:
                  data_files,
                  create_single_currency_data_set=False,
                  prediction_period=1,
-                 start_time_date=None):
+                 start_time_date=None,
+                 headers_to_remove=None,
+                 cluster_currencies=None):
         np.set_printoptions(formatter={'float': '{: 0.3f}'.format}, threshold=np.nan)
 
         self.currency = currency
@@ -70,13 +57,15 @@ class CurrencyPredictor:
         self.num_days_of_data = len(data_files) * 7
         self.start_time_date = start_time_date
         self.image_dir += '/{}'.format(currency)
+        self.headers_to_remove = headers_to_remove
+        self.cluster_currencies = cluster_currencies
 
         if not os.path.isdir(self.image_dir):
             os.makedirs(self.image_dir)
 
         if create_single_currency_data_set:
             #  We have to create the data set
-            self.df = self.create_data_frame_for_currency(self.currency, self.data_files)
+            self.df = self.create_data_frame_for_currency(self.currency, self.data_files, self.cluster_currencies)
             self.df = self.drop_unwanted_headers(self.df)
             self.df.fillna(0.0, inplace=True)
             self.df.to_csv('{}/{}.csv'.format(self.csv_dir, self.currency), index=False)
@@ -96,6 +85,7 @@ class CurrencyPredictor:
                          train_y=self.train_y,
                          test_x=self.test_x,
                          test_y=self.test_y)
+
 
     def do_training(self, train_x, train_y, test_x, test_y):
         for name, clf in self.classifiers.items():
@@ -184,14 +174,15 @@ class CurrencyPredictor:
 
          Example: A prediction period of 1 will lead to predicting prices 1 hour ahead
         """
+        # Setting next hours closing price to be the y
         self.df['Price_After_Period'] = self.df['close'].shift(-self.prediction_period)
         self.df['Price_After_Period'].fillna(0, inplace=True)
-        # print(self.df['Price_After_Period'])
-        # exit()
-        # print(self.df['Price_After_Period'].values.shape)
+        # Remove last row
         self.df.drop(self.df.tail(1).index, inplace=True)
         self.x_df = self.df.drop('Price_After_Period', axis=1)
+        # self.x is all columns except the y
         self.x = self.df.loc[:, self.x_df.columns != 'date'].values.reshape(-1, len(list(self.x_df)))
+        # self.y is only the y column
         self.y = self.df['Price_After_Period']
 
     def normalize_currency_data_set(self):
@@ -210,7 +201,7 @@ class CurrencyPredictor:
         # plt.legend()
         # plt.show()
 
-    def create_data_frame_for_currency(self, currency, data_files):
+    def create_data_frame_for_currency(self, currency, data_files, cluster_currencies):
         data_file_count = 0
         list_of_currency_dicts = []
 
@@ -231,24 +222,20 @@ class CurrencyPredictor:
 
             print('Building data frame for {}st period'.format(data_file_count + 1))
 
-            list_of_currency_dicts = self.build_data_frame_dict(df=df,
-                                                                list_of_currency_dicts=list_of_currency_dicts,
-                                                                currency=currency,
-                                                                date_list=date_list)
+            list_of_currency_dicts = self.build_data_frame_dict_for_selected_currency(df=df,
+                                                                                      list_of_currency_dicts=list_of_currency_dicts,
+                                                                                      selected_currency=currency,
+                                                                                      date_list=date_list,
+                                                                                      cluster_currencies=cluster_currencies)
             data_file_count += 1
 
         return pd.DataFrame(list_of_currency_dicts)
 
-    @staticmethod
-    def build_data_frame_dict(df, list_of_currency_dicts, currency, date_list):
+    def build_data_frame_dict_for_selected_currency(self, df, list_of_currency_dicts, selected_currency, date_list, cluster_currencies):
 
         # df.drop(['name'], axis=1, inplace=True)
         headers = list(df.drop(['name'], axis=1, inplace=False))
         currencies = df.set_index('name').T.to_dict('list')
-
-        selected_currency = currencies[currency]
-
-        currency_dict = dict(zip(headers, selected_currency))
 
         hour_counter = 0
 
@@ -262,52 +249,40 @@ class CurrencyPredictor:
 
             new_dict = {}
 
-            new_dict['close'] = currency_dict['close_{}'.format(str(hour_counter).zfill(4))]
-            new_dict['open'] = currency_dict['open_{}'.format(str(hour_counter).zfill(4))]
-            new_dict['high'] = currency_dict['high_{}'.format(str(hour_counter).zfill(4))]
-            new_dict['low'] = currency_dict['low_{}'.format(str(hour_counter).zfill(4))]
-            new_dict['volume_to'] = currency_dict['volume_to_{}'.format(str(hour_counter).zfill(4))]
-            new_dict['volume_from'] = currency_dict['volume_from_{}'.format(str(hour_counter).zfill(4))]
+            # Adding predicted currency to cluster array
+            # This is done to merge all data points from the clusters in one row
 
-            for country in country_list:
-                if 'i_o_t_{}_{}'.format(country, str(hour_counter).zfill(4)) in currency_dict:
-                    new_dict['interest_over_time_{}'.format(country)] = currency_dict[
-                        'i_o_t_{}_{}'.format(country, str(hour_counter).zfill(4))]
+            all_currencies = cluster_currencies + [selected_currency]
 
-            if hour_counter < 24:
-                new_dict['num_tweets'] = currency_dict['tweets_{}'.format(0)]
-                new_dict['num_retweets'] = currency_dict['retweets_{}'.format(0)]
-                new_dict['tweet_exposure'] = currency_dict['retweets_{}'.format(0)]
+            for currency in all_currencies:
 
-            elif 24 < hour_counter < 48:
-                new_dict['num_tweets'] = currency_dict['tweets_{}'.format(1)]
-                new_dict['num_retweets'] = currency_dict['retweets_{}'.format(1)]
-                new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(1)]
+                # Creating the prefix of the column headers
+                prefix = '{}_'.format(currency)
 
-            elif 48 < hour_counter < 72:
-                new_dict['num_tweets'] = currency_dict['tweets_{}'.format(2)]
-                new_dict['num_retweets'] = currency_dict['retweets_{}'.format(2)]
-                new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(2)]
+                if currency == selected_currency:
+                    prefix = ''
 
-            elif 72 < hour_counter < 96:
-                new_dict['num_tweets'] = currency_dict['tweets_{}'.format(3)]
-                new_dict['num_retweets'] = currency_dict['retweets_{}'.format(3)]
-                new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(3)]
+                current_currency = currencies[currency]
 
-            elif 96 < hour_counter < 120:
-                new_dict['num_tweets'] = currency_dict['tweets_{}'.format(4)]
-                new_dict['num_retweets'] = currency_dict['retweets_{}'.format(4)]
-                new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(4)]
+                currency_dict = dict(zip(headers, current_currency))
 
-            elif 128 < hour_counter < 144:
-                new_dict['num_tweets'] = currency_dict['tweets_{}'.format(5)]
-                new_dict['num_retweets'] = currency_dict['retweets_{}'.format(5)]
-                new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(5)]
+                new_dict['{}close'.format(prefix)] = currency_dict['close_{}'.format(str(hour_counter).zfill(4))]
+                new_dict['{}open'.format(prefix)] = currency_dict['open_{}'.format(str(hour_counter).zfill(4))]
+                new_dict['{}high'.format(prefix)] = currency_dict['high_{}'.format(str(hour_counter).zfill(4))]
+                new_dict['{}low'.format(prefix)] = currency_dict['low_{}'.format(str(hour_counter).zfill(4))]
+                new_dict['{}volume_to'.format(prefix)] = currency_dict['volume_to_{}'.format(str(hour_counter).zfill(4))]
+                new_dict['{}volume_from'.format(prefix)] = currency_dict['volume_from_{}'.format(str(hour_counter).zfill(4))]
 
-            else:
-                new_dict['num_tweets'] = currency_dict['tweets_{}'.format(6)]
-                new_dict['num_retweets'] = currency_dict['retweets_{}'.format(6)]
-                new_dict['tweet_exposure'] = currency_dict['exposure_{}'.format(6)]
+                for country in country_list:
+                    if 'i_o_t_{}_{}'.format(country, str(hour_counter).zfill(4)) in currency_dict:
+                        new_dict['{}interest_over_time_{}'.format(prefix, country)] = currency_dict[
+                            'i_o_t_{}_{}'.format(country, str(hour_counter).zfill(4))]
+
+                num_tweets, num_retweets, tweet_exposure = self.get_twitter_data_points_from_hour(hour_counter, currency_dict)
+
+                new_dict['{}num_tweets'.format(prefix)] = num_tweets
+                new_dict['{}num_retweets'.format(prefix)] = num_retweets
+                new_dict['{}tweet_exposure'.format(prefix)] = tweet_exposure
 
             new_dict['date'] = date_str
             hour_counter += 1
@@ -315,12 +290,39 @@ class CurrencyPredictor:
 
         return list_of_currency_dicts
 
+    @staticmethod
+    def get_twitter_data_points_from_hour(hour_counter, currency_dict):
+        # Finding the correct datapoints considering
+        # what hour the current data point is in
+        day = 0
+
+        if hour_counter < 24:
+            day = 0
+        elif 24 < hour_counter < 48:
+            day = 1
+        elif 48 < hour_counter < 72:
+            day = 2
+        elif 72 < hour_counter < 96:
+            day = 3
+        elif 96 < hour_counter < 120:
+            day = 4
+        elif 128 < hour_counter < 144:
+            day = 5
+        else:
+            day = 6
+
+        return currency_dict['tweets_{}'.format(day)], currency_dict['retweets_{}'.format(day)], currency_dict['exposure_{}'.format(day)]
+
     def drop_unwanted_headers(self, df):
         for unwanted_header in self.headers_to_remove:
             if unwanted_header in 'close' or unwanted_header in 'date':
                 print('Can not drop header: {}'.format(unwanted_header))
                 continue
             df.drop(unwanted_header, axis=1, inplace=True)
+
+            for currency in self.cluster_currencies:
+                df.drop('{}_'.format(currency) + unwanted_header, axis=1, inplace=True)
+
         return df
 
     def write_result(self):
@@ -341,6 +343,7 @@ class CurrencyPredictor:
         result['Removed_headers'] = self.headers_to_remove
         result['Prediction_period'] = self.prediction_period
         result['Data_files'] = self.data_files
+        result['Cluster_currencies'] = self.cluster_currencies
 
         results_df = pd.read_csv(results_path)
         flags_df = pd.DataFrame([result])
@@ -348,15 +351,38 @@ class CurrencyPredictor:
         concat_df.to_csv(results_path, index=False)
 
 if __name__ == '__main__':
-    data_files = ['crypto_data_week_9.csv', 'crypto_data_week_10.csv', 'crypto_data_week_11.csv']
 
-    start_time_date_week_9 = datetime.strptime('2018-02-28 08:00:00.00', '%Y-%m-%d %H:%M:%S.%f')
+    # TODO: Load automagically from column explanation.py
+    # variable all_headers is not used
+    all_headers = [
+        'close', 'date', 'high', 'interest_over_time_AU', 'interest_over_time_BR', 'interest_over_time_CA',
+        'interest_over_time_DE', 'interest_over_time_FR', 'interest_over_time_GB', 'interest_over_time_GH',
+        'interest_over_time_IN', 'interest_over_time_JP', 'interest_over_time_KE', 'interest_over_time_KR',
+        'interest_over_time_NG', 'interest_over_time_RU', 'interest_over_time_SG', 'interest_over_time_US',
+        'interest_over_time_VE', 'interest_over_time_ZA',  'interest_over_time_CN', 'low', 'num_retweets',
+        'num_tweets', 'open','tweet_exposure', 'volume_from', 'volume_to'
+    ]
 
-    currency_predictor = CurrencyPredictor(currency='Bitcoin',
+    data_files = ['crypto_data_week_9.csv', 'crypto_data_week_10.csv', 'crypto_data_week_11.csv', 'crypto_data_week_13.csv']
+
+    start_time_date_week_number = datetime.strptime('2018-02-28 08:00:00.00', '%Y-%m-%d %H:%M:%S.%f')
+
+    headers_to_remove = ['interest_over_time_US',
+                         'interest_over_time_KE',
+                         'interest_over_time_KR',
+                         'interest_over_time_NG']
+
+    cluster_currencies = ['Cardano', 'Monero', 'Bitcoin Gold']
+
+    selected_currency = 'Bitcoin'
+
+    currency_predictor = CurrencyPredictor(currency=selected_currency,
                                            data_files=data_files,
                                            create_single_currency_data_set=True,
                                            prediction_period=1,
-                                           start_time_date=start_time_date_week_9)
+                                           start_time_date=start_time_date_week_number,
+                                           headers_to_remove=headers_to_remove,
+                                           cluster_currencies=cluster_currencies)
     currency_predictor.plot_heat_map()
     print()
     currency_predictor.plot_predictions()
@@ -365,9 +391,9 @@ if __name__ == '__main__':
     print(22*'*' + ' BEST REGRESSOR ' + 22*'*')
     best_prediction_dict = currency_predictor.get_best_regressor()
     print('Name: {}'.format(best_prediction_dict['name']))
-    print('R2: {0:.3f}'.format(best_prediction_dict['R2']))
-    print('MAE: {0:.3f}'.format(best_prediction_dict['MAE']))
-    print('MSE: {0:.3f}'.format(best_prediction_dict['MSE']))
+    print('R2: {0:.4f}'.format(best_prediction_dict['R2']))
+    print('MAE: {0:.4f}'.format(best_prediction_dict['MAE']))
+    print('MSE: {0:.4f}'.format(best_prediction_dict['MSE']))
     print('{0:.3f}%'.format(best_prediction_dict['accuracy']))
     print(60*'*')
 
