@@ -6,6 +6,7 @@ import os
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import pandas as pd
+
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from sklearn.linear_model import LinearRegression
@@ -24,8 +25,8 @@ class CurrencyPredictor:
 
     x_df = None  # Data frame of x - features (instead of numpy array)
 
-    classifiers = {
-        'LinearRegression': LinearRegression(),
+    regressors = {
+        #'LinearRegression': LinearRegression(),
         'Random Forest Regressor': RandomForestRegressor(n_estimators=100, random_state=101),
         'Gradient Boosting Regressor': GradientBoostingRegressor(n_estimators=500, learning_rate=0.1),
         'Bagging Regressor': BaggingRegressor(n_estimators=500),
@@ -41,6 +42,8 @@ class CurrencyPredictor:
     start_time_date = None
 
     csv_dir = os.path.dirname(os.path.abspath(__file__)) + '/csv_files'
+
+    feature_names = []
 
     def __init__(self, currency,
                  data_files,
@@ -86,20 +89,19 @@ class CurrencyPredictor:
                          test_x=self.test_x,
                          test_y=self.test_y)
 
-
     def do_training(self, train_x, train_y, test_x, test_y):
-        for name, clf in self.classifiers.items():
-            nada = clf.fit(train_x, train_y)
+        for name, regressor in self.regressors.items():
+            nada = regressor.fit(train_x, train_y)
             # Sklearn/base.py line 357
             # Returns the coefficient of determination R^2 of the prediction
             score = nada.score(test_x, test_y)
-            prediction_on_test = clf.predict(test_x)
+            prediction_on_test = regressor.predict(test_x)
             # We'll take the last period elements to make our predictions on them
             #cost_values = self.x_df.drop(self.x_df.tail(self.prediction_period).index, inplace=False)
             # cost_values = self.x_df
             # cost_values = self.x_df[-(167 * len(self.data_files)) - self.prediction_period:]
             cost_values = self.x_df
-            forecast = clf.predict(cost_values)
+            forecast = regressor.predict(cost_values)
 
             accuracy = score * 100
             mae = mean_absolute_error(test_y, prediction_on_test)
@@ -124,37 +126,64 @@ class CurrencyPredictor:
                 'prediction_on_test_set': prediction_on_test,
                 'name': name,
                 'forecast': forecast,
-                'close': cost_values
+                'close': cost_values,
+                'regressor': regressor
             })
 
     def plot_predictions(self):
-
         for sum_dict in self.summary:
             name = sum_dict['name'] + '_forecast'
             print('Plotting {}_{}.png'.format(name, self.currency))
             self.df_copy[name] = sum_dict['forecast']
-            self.df_copy['close'].plot(figsize=(12, 6), label='Close (actual value)',
+            self.x_df['close'].plot(figsize=(12, 6), label='Close (actual value)',
                                        title='Currency: {}, Prediction period: {} hour'.format(self.currency,
                                                                                                self.prediction_period))
+            #self.df_copy[name].shift(self.prediction_period).plot(figsize=(12, 6), label=name)
             self.df_copy[name].plot(figsize=(12, 6), label=name)
             plt.legend()
             plt.savefig('{}/{}_{}.png'.format(self.image_dir, name, self.currency), bbox_inches='tight')
             plt.gcf().clear()
             #exit()
-            # plt.show()
+            #plt.show()
 
-    def plot_heat_map(self):
-        print('Plotting heat map from prediction on test set')
-        predictions = [(sum_dict['prediction_on_test_set'], sum_dict['name']) for sum_dict in self.summary]
-        names = [x[1] for x in predictions] + ['test_y']
+    def plot_feature_importance(self):
+        for sum_dict in self.summary:
+            name = sum_dict['name'] + '_feature-importance'
+            regressor = sum_dict['regressor']
+            # Plot feature importance
+            if hasattr(regressor, 'feature_importances_'):
+                feature_importance = regressor.feature_importances_
+            else:
+                feature_importance = np.mean([tree.feature_importances_ for tree in regressor.estimators_], axis=0)
 
-        stack_predict = np.vstack([x[0] for x in predictions] + [self.test_y]).T
-        corr_df = pd.DataFrame(stack_predict, columns=names)
-        plt.figure(figsize=(10,5))
-        sns.heatmap(corr_df.corr(), annot=True)
-        plt.savefig('{}/prediction_heatmap_{}.png'.format(self.image_dir, self.currency), bbox_inches='tight')
-        plt.gcf().clear()
-        # plt.show()
+            indices = np.argsort(feature_importance)[::-1]
+            #for f in range(self.x.shape[1]):
+                #print('%d. feature %d (%f)' % (f + 1, indices[f], feature_importance[indices[f]]))
+                #feature_importance[indices[f]]
+
+            # make importances relative to max importance
+            feature_importance = 100.0 * (feature_importance / feature_importance.max())
+            sorted_idx = np.argsort(feature_importance)
+
+            plt.figure(figsize=(10, 5))
+            plt.subplot(1, 2, 2)
+            pos = np.arange(sorted_idx.shape[0]) + .5
+            plt.barh(pos, feature_importance[sorted_idx], align='center',  color='coral')
+            ax = plt.gca()
+            ax.set_alpha(0.8)
+
+            for i in ax.patches:
+                # get_width pulls left or right; get_y pushes up or down
+                ax.text(i.get_width() + 1, i.get_y() + .10, str(round((i.get_width() / feature_importance.max()) * 100, 4)) + '%', fontsize=9,
+                        color='dimgrey')
+
+            plt.yticks(pos, self.feature_names[sorted_idx])
+            plt.xlabel('Relative Importance')  # (feature_importance / max_feature_importance) * 100
+            plt.title(name)
+
+            plt.savefig('{}/{}_{}.png'.format(self.image_dir, name, self.currency), bbox_inches='tight')
+            plt.gcf().clear()
+            #plt.show()
 
     def get_best_regressor(self):
         highest_acc_value = -1
@@ -178,10 +207,12 @@ class CurrencyPredictor:
         self.df['Price_After_Period'] = self.df['close'].shift(-self.prediction_period)
         self.df['Price_After_Period'].fillna(0, inplace=True)
         # Remove last row
-        self.df.drop(self.df.tail(1).index, inplace=True)
+        self.df.drop(self.df.tail(self.prediction_period).index, inplace=True)
         self.x_df = self.df.drop('Price_After_Period', axis=1)
         # self.x is all columns except the y
         self.x = self.df.loc[:, self.x_df.columns != 'date'].values.reshape(-1, len(list(self.x_df)))
+        self.feature_names = list(filter(lambda a: a != 'date', list(self.x_df)))
+        self.feature_names = np.asarray(self.feature_names)
         # self.y is only the y column
         self.y = self.df['Price_After_Period']
 
@@ -193,9 +224,9 @@ class CurrencyPredictor:
         self.df[used_columns] = scale.fit_transform(self.df[used_columns])
 
         self.df['close'].plot(figsize=(12,6),label='Close')
-        self.df['close'].rolling(window=self.num_days_of_data).mean().plot(
-            label='{} Day Avg'.format(self.num_days_of_data))
+        self.df['close'].rolling(window=self.num_days_of_data).mean().plot(label='{} Day Avg'.format(self.num_days_of_data))
         plt.legend()
+        plt.title('avg_price_{}_days'.format(self.num_days_of_data))
         plt.savefig('{}/avg_price_{}_days.png'.format(self.image_dir, self.num_days_of_data), bbox_inches='tight')
         plt.gcf().clear()
         # plt.legend()
@@ -363,16 +394,26 @@ if __name__ == '__main__':
         'num_tweets', 'open','tweet_exposure', 'volume_from', 'volume_to'
     ]
 
-    data_files = ['crypto_data_week_9.csv', 'crypto_data_week_10.csv', 'crypto_data_week_11.csv', 'crypto_data_week_13.csv']
+    data_files = ['crypto_data_week_9.csv',
+                  'crypto_data_week_10.csv',
+                  'crypto_data_week_11.csv',
+                  'crypto_data_week_13.csv',
+                  'crypto_data_week_14.csv'
+                  ]
 
     start_time_date_week_number = datetime.strptime('2018-02-28 08:00:00.00', '%Y-%m-%d %H:%M:%S.%f')
 
-    headers_to_remove = ['interest_over_time_US',
-                         'interest_over_time_KE',
-                         'interest_over_time_KR',
-                         'interest_over_time_NG']
+    # headers_to_remove = ['interest_over_time_US',
+    #                      'interest_over_time_KE',
+    #                      'interest_over_time_KR',
+    #                      'interest_over_time_NG']
 
-    cluster_currencies = ['Cardano', 'Monero', 'Bitcoin Gold']
+    headers_to_remove = []
+
+    # Note that higher prediction period gets higher accuracy if cluster currencies are appended to data set
+    # This increase in accuracy is not as big in when predition periods are smaller
+
+    cluster_currencies = []#['Litecoin', 'Ethereum Classic']#['Cardano', 'Monero', 'Bitcoin Gold', 'Qtum', 'Zcash']
 
     selected_currency = 'Bitcoin'
 
@@ -383,7 +424,7 @@ if __name__ == '__main__':
                                            start_time_date=start_time_date_week_number,
                                            headers_to_remove=headers_to_remove,
                                            cluster_currencies=cluster_currencies)
-    currency_predictor.plot_heat_map()
+    currency_predictor.plot_feature_importance()
     print()
     currency_predictor.plot_predictions()
     print()
