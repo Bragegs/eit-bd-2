@@ -147,8 +147,7 @@ class CurrencyPredictor:
             plot_df = pd.DataFrame(columns=['Close', sum_dict['name'] + ' forecast'])
 
             for i in range(len(original_cost_values)):
-                if i == 0:
-                    # First prediction is in point 2
+                if i - self.prediction_period <= 0:
                     plot_df.loc[i] = [original_cost_values['close'][i], None]
                 else:
                     plot_df.loc[i] = [original_cost_values['close'][i], forecast[i-self.prediction_period]]
@@ -230,6 +229,10 @@ class CurrencyPredictor:
 
             num_days = self.num_days_of_data * 24
             num_last_predictions = 20
+
+            if num_last_predictions <= self.prediction_period:
+                num_last_predictions *= 2
+
             delta = num_days - num_last_predictions
             values_to_predict = self.x_df.drop(self.x_df.head(delta).index, inplace=False)  # self.x_df[-delta:]
             regressor = sum_dict['regressor']
@@ -246,6 +249,14 @@ class CurrencyPredictor:
                     # Make all 3 graph end/start on same place for UI
                     df.loc[i] = [original_cost_values['close'][i], original_cost_values['close'][i], original_cost_values['close'][i], original_cost_values['close'][i]]
                 elif i > len(original_cost_values) - show_period:
+
+                    # if i - self.prediction_period <= 0:
+                    #     print('HEERE')
+                    #     print(i)
+                    #     df.loc[i] = [None, original_cost_values['close'][i], None, None]
+                    # else:
+                    #     df.loc[i] = [None, original_cost_values['close'][i], forecast[i - self.prediction_period], None] # Shifting forecast to actual close value
+
                     df.loc[i] = [None, original_cost_values['close'][i], forecast[i-self.prediction_period], None]  # Shifting forecast to actual close value
                 else:
                     df.loc[i] = [original_cost_values['close'][i], None, None, None]
@@ -273,6 +284,8 @@ class CurrencyPredictor:
     def plot_feature_importance(self):
         for sum_dict in self.summary:
             name = sum_dict['name'] + ' feature-importance'
+            print('Plotting feature importance ' + name)
+
             regressor = sum_dict['regressor']
             # Plot feature importance
             if hasattr(regressor, 'feature_importances_'):
@@ -280,6 +293,10 @@ class CurrencyPredictor:
             else:
                 feature_importance = np.mean([tree.feature_importances_ for tree in regressor.estimators_], axis=0)
 
+            #feature_importance = np.asarray(sorted(feature_importance))
+            #if len(feature_importance) > 40:
+            #feature_importance = feature_importance[:10000]
+            #exit()
             #indices = np.argsort(feature_importance)[::-1]
             #for f in range(self.x.shape[1]):
                 #print('%d. feature %d (%f)' % (f + 1, indices[f], feature_importance[indices[f]]))
@@ -287,18 +304,21 @@ class CurrencyPredictor:
 
             # make importances relative to max importance
             feature_importance = 100.0 * (feature_importance / feature_importance.max())
-            sorted_idx = np.argsort(feature_importance)
+            if len(feature_importance) > 35:
+                sorted_idx = np.argsort(feature_importance)[-35:]
+            else:
+                sorted_idx = np.argsort(feature_importance)
 
             plt.figure(figsize=(10, 5))
             plt.subplot(1, 2, 2)
-            pos = np.arange(sorted_idx.shape[0]) + .5
+            pos = np.arange(sorted_idx.shape[0]) + .2
             plt.barh(pos, feature_importance[sorted_idx], align='center',  color='coral')
             ax = plt.gca()
             ax.set_alpha(0.8)
 
             for i in ax.patches:
                 # get_width pulls left or right; get_y pushes up or down
-                ax.text(i.get_width() + 1, i.get_y() + .10, str(round((i.get_width() / feature_importance.max()) * 100, 4)) + '%', fontsize=9,
+                ax.text(i.get_width() + 1, i.get_y() + .10, str(round((i.get_width() / feature_importance.max()) * 100, 4)) + '%', fontsize=7,
                         color='dimgrey')
 
             plt.yticks(pos, self.feature_names[sorted_idx])
@@ -554,12 +574,12 @@ if __name__ == '__main__':
 
 
     headers_to_remove = [
-        'high', 'interest_over_time_AU', 'interest_over_time_BR', 'interest_over_time_CA',
-        'interest_over_time_DE', 'interest_over_time_FR', 'interest_over_time_GB', 'interest_over_time_GH',
-        'interest_over_time_IN', 'interest_over_time_JP', 'interest_over_time_KE', 'interest_over_time_KR',
-        'interest_over_time_NG', 'interest_over_time_RU', 'interest_over_time_SG', 'interest_over_time_US',
-        'interest_over_time_VE', 'interest_over_time_ZA',  'interest_over_time_CN', 'low', 'num_retweets',
-        'num_tweets', 'open','tweet_exposure', 'volume_from', 'volume_to'
+        # 'high', 'interest_over_time_AU', 'interest_over_time_BR', 'interest_over_time_CA',
+        # 'interest_over_time_DE', 'interest_over_time_FR', 'interest_over_time_GB', 'interest_over_time_GH',
+        # 'interest_over_time_IN', 'interest_over_time_JP', 'interest_over_time_KE', 'interest_over_time_KR',
+        # 'interest_over_time_NG', 'interest_over_time_RU', 'interest_over_time_SG', 'interest_over_time_US',
+        # 'interest_over_time_VE', 'interest_over_time_ZA',  'interest_over_time_CN', 'low', 'num_retweets',
+        # 'num_tweets', 'open','tweet_exposure', 'volume_from', 'volume_to'
                           ]
 
     used_features = list(filter(lambda a: a not in headers_to_remove and a not in 'date', all_headers))
@@ -567,14 +587,14 @@ if __name__ == '__main__':
     # Note that higher prediction period gets higher accuracy if cluster currencies are appended to data set
     # This increase in accuracy is not as big in when predition periods are smaller
 
-    cluster_currencies = []#'Litecoin', 'Ethereum Classic']#'Cardano', 'Monero', 'Bitcoin Gold', 'Qtum', 'Zcash']
+    cluster_currencies = ['NEO', 'EOS', 'Dash', 'ICON']#'Litecoin', 'Ethereum Classic']#'Cardano', 'Monero', 'Bitcoin Gold', 'Qtum', 'Zcash']
 
     selected_currency = 'Bitcoin'
 
     currency_predictor = CurrencyPredictor(currency=selected_currency,
                                            data_files=data_files,
                                            create_single_currency_data_set=True,
-                                           prediction_period=1,
+                                           prediction_period=24,
                                            start_time_date=start_time_date_week_number,
                                            headers_to_remove=headers_to_remove,
                                            cluster_currencies=cluster_currencies)
