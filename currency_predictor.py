@@ -158,6 +158,34 @@ class CurrencyPredictor:
                     title='Currency: {}, Prediction period: {} hour'.format(self.currency, self.prediction_period))
             plt.legend()
             plt.xlabel('Hour')
+            plt.ylabel('Close')
+            plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'), bbox_inches='tight', dpi=300)
+            #plt.show()
+
+    def plot_regressor_error(self):
+        for sum_dict in self.summary:
+            name = sum_dict['name'] + ' error'
+            print('Plotting {}_{}.png'.format(name, self.currency))
+            values_to_predict = self.x_df.copy()
+            regressor = sum_dict['regressor']
+
+            forecast = regressor.predict(values_to_predict)
+            original_cost_values = values_to_predict[['close']]
+
+            plot_df = pd.DataFrame(columns=['Error'])
+            #plot_df['error'] = plot_df[sum_dict['name'] + ' forecast'] - plot_df['Close']
+
+            for i in range(len(original_cost_values)):
+                if i - self.prediction_period <= 0:
+                    plot_df.loc[i] = [None]
+                else:
+                    plot_df.loc[i] = [forecast[i-self.prediction_period] - original_cost_values['close'][i]]
+
+            plot_df.plot(figsize=(12, 6), label=name,
+                    title='Currency: {}, Prediction period: {} hour'.format(self.currency, self.prediction_period))
+            plt.legend()
+            plt.xlabel('Hour')
+            plt.ylabel('Error (predicted - actual close)')
             plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'), bbox_inches='tight', dpi=300)
             #plt.show()
 
@@ -262,7 +290,6 @@ class CurrencyPredictor:
                     #     df.loc[i] = [None, original_cost_values['close'][i], None, None]
                     # else:
                     #     df.loc[i] = [None, original_cost_values['close'][i], forecast[i - self.prediction_period], None] # Shifting forecast to actual close value
-                    print(i-self.prediction_period)
                     df.loc[i] = [start_time_date, None, original_cost_values['close'][i], forecast[i-self.prediction_period], None]  # Shifting forecast to actual close value
                 else:
                     df.loc[i] = [start_time_date, original_cost_values['close'][i], None, None, None]
@@ -295,7 +322,6 @@ class CurrencyPredictor:
             plt.ylabel('Close')
             plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'), bbox_inches='tight', dpi=300)
             # plt.gcf().clear()
-            # exit()
             #plt.show()
 
     def plot_feature_importance(self):
@@ -313,7 +339,6 @@ class CurrencyPredictor:
             #feature_importance = np.asarray(sorted(feature_importance))
             #if len(feature_importance) > 40:
             #feature_importance = feature_importance[:10000]
-            #exit()
             #indices = np.argsort(feature_importance)[::-1]
             #for f in range(self.x.shape[1]):
                 #print('%d. feature %d (%f)' % (f + 1, indices[f], feature_importance[indices[f]]))
@@ -364,6 +389,22 @@ class CurrencyPredictor:
         plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'), bbox_inches='tight')
         #  plt.show()
         plt.gcf().clear()
+
+    def write_latex_table(self):
+        df = pd.DataFrame(columns=['Regressor', 'Prediction period', 'MAE', 'MSE', 'R2', 'Inc. cluster features'])
+
+        for i, sum_dict in enumerate(self.summary):
+            Regressor = sum_dict['name']
+            MSE = sum_dict['MSE']
+            MAE = sum_dict['MAE']
+            R2 = sum_dict['R2']
+            inc_cluster = 'yes' if len(self.cluster_currencies) > 0 else 'no'
+
+            df.loc[i] = [Regressor, self.prediction_period, MAE, MSE, R2, inc_cluster]
+
+        with open('results.tex', 'a') as tf:
+            tf.write('\n prediction_period: {}, currency: {} \n'.format(self.prediction_period, self.currency))
+            tf.write(df.to_latex())
 
     def get_best_regressor(self, print_it):
         highest_score_value = -1
@@ -615,9 +656,14 @@ if __name__ == '__main__':
                                            start_time_date=start_time_date_week_number,
                                            headers_to_remove=headers_to_remove,
                                            cluster_currencies=cluster_currencies)
-    #currency_predictor.plot_feature_importance()
+
+    currency_predictor.write_latex_table()
+    exit()
+    currency_predictor.plot_regressor_error()
     print()
-    #currency_predictor.plot_predictions()
+    currency_predictor.plot_feature_importance()
+    print()
+    currency_predictor.plot_predictions()
     print()
     currency_predictor.plot_last_predictions()
     print()
@@ -627,6 +673,7 @@ if __name__ == '__main__':
     currency_predictor.plot_regressor_results(val_name='score', color='#C3DFEE')
     print()
     currency_predictor.plot_features(used_features, headers_to_remove, cluster_currencies)
+    print()
 
     best_prediction_dict = currency_predictor.get_best_regressor(print_it=True)
     print(22*'*' + ' BEST REGRESSOR ' + 22*'*')
