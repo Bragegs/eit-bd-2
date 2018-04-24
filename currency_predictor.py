@@ -5,6 +5,8 @@ import os
 
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
 import pandas as pd
 
 from sklearn.preprocessing import MinMaxScaler
@@ -29,10 +31,10 @@ class CurrencyPredictor:
 
     regressors = {
         #'LinearRegression': LinearRegression(),
-        ('Random Forest Regressor', 'RFR'): RandomForestRegressor(n_estimators=500, random_state=101),
-        ('Gradient Boosting Regressor', 'GBR'): GradientBoostingRegressor(n_estimators=500, learning_rate=0.1),
-        ('Bagging Regressor', 'BR'): BaggingRegressor(n_estimators=500),
-        ('AdaBoost Regressor', 'ABR'): AdaBoostRegressor(n_estimators=500, learning_rate=0.1),
+        #('Random Forest Regressor', 'RFR'): RandomForestRegressor(n_estimators=500, random_state=101),
+        #('Gradient Boosting Regressor', 'GBR'): GradientBoostingRegressor(n_estimators=500, learning_rate=0.1),
+        #('Bagging Regressor', 'BR'): BaggingRegressor(n_estimators=500),
+        #('AdaBoost Regressor', 'ABR'): AdaBoostRegressor(n_estimators=500, learning_rate=0.1),
         ('Extra Tree Regressor', 'ETR'): ExtraTreesRegressor(n_estimators=500),
     }
 
@@ -224,31 +226,35 @@ class CurrencyPredictor:
 
     def plot_last_predictions(self):
         for sum_dict in self.summary:
+
             name = sum_dict['name'] + ' last predictions'
             print('Plotting last predictions of {}_{}.png'.format(name, self.currency))
 
-            num_days = self.num_days_of_data * 24
-            num_last_predictions = 20
+            period_length = 8
 
-            if num_last_predictions <= self.prediction_period:
-                num_last_predictions *= 2
+            delta = 2*period_length*self.prediction_period  # num_days - num_last_predictions
+            print(delta)
 
-            delta = num_days - num_last_predictions
             values_to_predict = self.x_df.drop(self.x_df.head(delta).index, inplace=False)  # self.x_df[-delta:]
+
             regressor = sum_dict['regressor']
 
             forecast = regressor.predict(values_to_predict)
             original_cost_values = values_to_predict[['close']]
 
-            df = pd.DataFrame(columns=['Close', 'Actual value', sum_dict['name'] + ' forecast', 'Prediction start'])
+            df = pd.DataFrame(columns=['Date', 'Close', 'Actual value', sum_dict['name'] + ' forecast', 'Prediction start'])
 
-            show_period = 8
+            if not self.start_time_date:
+                start_time_date = datetime.now()
+            else:
+                start_time_date = self.start_time_date
 
-            for i in range(len(original_cost_values)):
-                if i == len(original_cost_values) - show_period:
+            for i in range(0, 2*period_length*self.prediction_period, self.prediction_period):
+
+                if i == (period_length * self.prediction_period):
                     # Make all 3 graph end/start on same place for UI
-                    df.loc[i] = [original_cost_values['close'][i], original_cost_values['close'][i], original_cost_values['close'][i], original_cost_values['close'][i]]
-                elif i > len(original_cost_values) - show_period:
+                    df.loc[i] = [start_time_date, original_cost_values['close'][i], original_cost_values['close'][i], original_cost_values['close'][i], original_cost_values['close'][i]]
+                elif i > period_length*self.prediction_period:
 
                     # if i - self.prediction_period <= 0:
                     #     print('HEERE')
@@ -256,26 +262,37 @@ class CurrencyPredictor:
                     #     df.loc[i] = [None, original_cost_values['close'][i], None, None]
                     # else:
                     #     df.loc[i] = [None, original_cost_values['close'][i], forecast[i - self.prediction_period], None] # Shifting forecast to actual close value
-
-                    df.loc[i] = [None, original_cost_values['close'][i], forecast[i-self.prediction_period], None]  # Shifting forecast to actual close value
+                    print(i-self.prediction_period)
+                    df.loc[i] = [start_time_date, None, original_cost_values['close'][i], forecast[i-self.prediction_period], None]  # Shifting forecast to actual close value
                 else:
-                    df.loc[i] = [original_cost_values['close'][i], None, None, None]
+                    df.loc[i] = [start_time_date, original_cost_values['close'][i], None, None, None]
 
+                start_time_date = start_time_date + timedelta(hours=1*self.prediction_period)
+
+
+            df.set_index('Date', inplace=True)
             df.plot(y='Actual value')
 
             ax = df.plot(y='Close')
+            df.plot(y=sum_dict['name'] + ' forecast', ax=ax, subplots=True, color='#808AB3')
             df.plot(y='Actual value', linestyle='dotted', ax=ax, subplots=True, color='#ba645b')
-            df.plot(y=sum_dict['name'] + ' forecast', ax=ax, subplots=True, color='#808AB3',)
             df.plot(y='Prediction start', marker='o', ax=ax, subplots=True, color='#565656')
             ax.legend()
 
-            plt.title('Prediction vs actual last {} points for {}'.format(show_period, self.currency))
-            #df.plot(y=['Close', 'Actual value', sum_dict['name'] + ' forecast'], figsize=(12, 6), label=name,
-                    #title='Currency: {}, Prediction period: {} hour'.format(self.currency, self.prediction_period))
-            #df.plot(y=['Prediction point'], marker='x', linestyle='dotted')
+            if self.prediction_period >= 24:
+                x_axis_format = '%d/%m'
+                x_axis_name = 'Day'
+            else:
+                x_axis_format = '%H:%M'
+                x_axis_name = 'Hour'
+
+            ax.xaxis.set_major_formatter(mdates.DateFormatter(x_axis_format))
+
+            plt.title('Prediction vs actual for {}'.format(period_length, self.currency))
 
             plt.legend()
-            plt.xlabel('Hour')
+            plt.xlabel(x_axis_name)
+            plt.ylabel('Close')
             plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'), bbox_inches='tight', dpi=300)
             # plt.gcf().clear()
             # exit()
@@ -587,20 +604,20 @@ if __name__ == '__main__':
     # Note that higher prediction period gets higher accuracy if cluster currencies are appended to data set
     # This increase in accuracy is not as big in when predition periods are smaller
 
-    cluster_currencies = ['NEO', 'EOS', 'Dash', 'ICON']#'Litecoin', 'Ethereum Classic']#'Cardano', 'Monero', 'Bitcoin Gold', 'Qtum', 'Zcash']
+    cluster_currencies = []#['NEO', 'EOS', 'Dash', 'ICON']#'Litecoin', 'Ethereum Classic']#'Cardano', 'Monero', 'Bitcoin Gold', 'Qtum', 'Zcash']
 
     selected_currency = 'Bitcoin'
 
     currency_predictor = CurrencyPredictor(currency=selected_currency,
                                            data_files=data_files,
                                            create_single_currency_data_set=True,
-                                           prediction_period=24,
+                                           prediction_period=1,
                                            start_time_date=start_time_date_week_number,
                                            headers_to_remove=headers_to_remove,
                                            cluster_currencies=cluster_currencies)
-    currency_predictor.plot_feature_importance()
+    #currency_predictor.plot_feature_importance()
     print()
-    currency_predictor.plot_predictions()
+    #currency_predictor.plot_predictions()
     print()
     currency_predictor.plot_last_predictions()
     print()
@@ -610,7 +627,6 @@ if __name__ == '__main__':
     currency_predictor.plot_regressor_results(val_name='score', color='#C3DFEE')
     print()
     currency_predictor.plot_features(used_features, headers_to_remove, cluster_currencies)
-
 
     best_prediction_dict = currency_predictor.get_best_regressor(print_it=True)
     print(22*'*' + ' BEST REGRESSOR ' + 22*'*')
