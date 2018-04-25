@@ -15,6 +15,6 @@ def get_top_x_market_cap(x):
 
     print('Top {} market cap crypto currencies'.format(x))
     for cc in filtered_crypto_currencies:
-        print(cc['name'])
+        print('"{}",'.format(cc['name']))
 
     return filtered_crypto_currencies
