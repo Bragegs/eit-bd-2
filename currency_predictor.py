@@ -11,14 +11,15 @@ import pandas as pd
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
-from sklearn.linear_model import LinearRegression
+#from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 
 from datetime import datetime, timedelta
 from sklearn.ensemble import *
 
 import seaborn as sns  # Only used for heatmap
-#sns.set()
+
+# sns.set()
 sns.set(style='ticks', palette='Set2')
 sns.despine()
 
@@ -29,14 +30,7 @@ class CurrencyPredictor:
 
     x_df = None  # Data frame of x - features (instead of numpy array)
 
-    regressors = {
-        #'LinearRegression': LinearRegression(),
-        #('Random Forest Regressor', 'RFR'): RandomForestRegressor(n_estimators=500, random_state=101),
-        #('Gradient Boosting Regressor', 'GBR'): GradientBoostingRegressor(n_estimators=500, learning_rate=0.1),
-        #('Bagging Regressor', 'BR'): BaggingRegressor(n_estimators=500),
-        #('AdaBoost Regressor', 'ABR'): AdaBoostRegressor(n_estimators=500, learning_rate=0.1),
-        ('Extra Tree Regressor', 'ETR'): ExtraTreesRegressor(n_estimators=500),
-    }
+    regressors = None
 
     summary = list()
     num_days_of_data = None
@@ -46,7 +40,7 @@ class CurrencyPredictor:
 
     csv_dir = os.path.dirname(os.path.abspath(__file__)) + '/csv_files'
 
-    feature_names = []
+    feature_names = list()
 
     def __init__(self, currency,
                  data_files,
@@ -57,14 +51,28 @@ class CurrencyPredictor:
                  cluster_currencies=None):
         np.set_printoptions(formatter={'float': '{: 0.3f}'.format}, threshold=np.nan)
 
+        self.x = None
+        self.y = None
+        self.x_df = None
+        self.summary = list()
+        self.feature_names = list()
+        self.regressors = {
+            # 'LinearRegression': LinearRegression(),
+            ('Random Forest Regressor', 'RFR'): RandomForestRegressor(n_estimators=500, random_state=101),
+            ('Gradient Boosting Regressor', 'GBR'): GradientBoostingRegressor(n_estimators=500, learning_rate=0.1),
+            ('Bagging Regressor', 'BR'): BaggingRegressor(n_estimators=500),
+            ('AdaBoost Regressor', 'ABR'): AdaBoostRegressor(n_estimators=500, learning_rate=0.1),
+            ('Extra Tree Regressor', 'ETR'): ExtraTreesRegressor(n_estimators=500),
+        }
         self.currency = currency
         self.prediction_period = prediction_period
         self.data_files = data_files
         self.num_days_of_data = len(data_files) * 7
         self.start_time_date = start_time_date
-        self.image_dir += '/{}'.format(currency)
         self.headers_to_remove = headers_to_remove
         self.cluster_currencies = cluster_currencies
+        self.image_dir += '/{}_{}h_{}'.format(currency, self.prediction_period,
+                                              'cluster' if len(self.cluster_currencies) > 0 else 'no_cluster')
 
         if not os.path.isdir(self.image_dir):
             os.makedirs(self.image_dir)
@@ -75,17 +83,20 @@ class CurrencyPredictor:
             self.df = self.drop_unwanted_headers(self.df)
             self.df.fillna(0.0, inplace=True)
             self.df.to_csv('{}/{}.csv'.format(self.csv_dir, self.currency), index=False)
-            self.df = pd.read_csv('{}/{}.csv'.format(self.csv_dir, self.currency), parse_dates=['date'], index_col='date')
+            self.df = pd.read_csv('{}/{}.csv'.format(self.csv_dir, self.currency), parse_dates=['date'],
+                                  index_col='date')
         else:
             #  The data set is already created
-            self.df = pd.read_csv('{}/{}.csv'.format(self.csv_dir, self.currency), parse_dates=['date'], index_col='date')
+            self.df = pd.read_csv('{}/{}.csv'.format(self.csv_dir, self.currency), parse_dates=['date'],
+                                  index_col='date')
             self.df = self.drop_unwanted_headers(self.df)
 
         self.normalize_currency_data_set()
         self.create_labels_based_on_prediction_period()
         self.df_copy = self.df
 
-        self.train_x, self.test_x, self.train_y, self.test_y = train_test_split(self.x, self.y, test_size=0.2, random_state=101)
+        self.train_x, self.test_x, self.train_y, self.test_y = train_test_split(self.x, self.y, test_size=0.2,
+                                                                                random_state=101)
 
         self.do_training(train_x=self.train_x,
                          train_y=self.train_y,
@@ -100,7 +111,7 @@ class CurrencyPredictor:
             score = nada.score(test_x, test_y)
             prediction_on_test = regressor.predict(test_x)
             # We'll take the last period elements to make our predictions on them
-            #cost_values = self.x_df.drop(self.x_df.tail(self.prediction_period).index, inplace=False)
+            # cost_values = self.x_df.drop(self.x_df.tail(self.prediction_period).index, inplace=False)
             # cost_values = self.x_df
             # cost_values = self.x_df[-(167 * len(self.data_files)) - self.prediction_period:]
             cost_values = self.x_df
@@ -152,15 +163,17 @@ class CurrencyPredictor:
                 if i - self.prediction_period <= 0:
                     plot_df.loc[i] = [original_cost_values['close'][i], None]
                 else:
-                    plot_df.loc[i] = [original_cost_values['close'][i], forecast[i-self.prediction_period]]
+                    plot_df.loc[i] = [original_cost_values['close'][i], forecast[i - self.prediction_period]]
 
             plot_df.plot(figsize=(12, 6), label=name,
-                    title='Currency: {}, Prediction period: {} hour'.format(self.currency, self.prediction_period))
+                         title='Currency: {}, Prediction period: {}h. Forecast.'.format(self.currency,
+                                                                                        self.prediction_period))
             plt.legend()
             plt.xlabel('Hour')
             plt.ylabel('Close')
-            plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'), bbox_inches='tight', dpi=300)
-            #plt.show()
+            plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'),
+                        bbox_inches='tight', dpi=300)
+            # plt.show()
 
     def plot_regressor_error(self):
         for sum_dict in self.summary:
@@ -173,21 +186,26 @@ class CurrencyPredictor:
             original_cost_values = values_to_predict[['close']]
 
             plot_df = pd.DataFrame(columns=['Error'])
-            #plot_df['error'] = plot_df[sum_dict['name'] + ' forecast'] - plot_df['Close']
+            # plot_df['error'] = plot_df[sum_dict['name'] + ' forecast'] - plot_df['Close']
 
             for i in range(len(original_cost_values)):
                 if i - self.prediction_period <= 0:
                     plot_df.loc[i] = [None]
                 else:
-                    plot_df.loc[i] = [forecast[i-self.prediction_period] - original_cost_values['close'][i]]
+                    plot_df.loc[i] = [forecast[i - self.prediction_period] - original_cost_values['close'][i]]
 
             plot_df.plot(figsize=(12, 6), label=name,
-                    title='Currency: {}, Prediction period: {} hour'.format(self.currency, self.prediction_period))
+                         title='Currency: {}, Prediction period: {}h. Error.'.format(self.currency,
+                                                                                     self.prediction_period))
             plt.legend()
             plt.xlabel('Hour')
             plt.ylabel('Error (predicted - actual close)')
-            plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'), bbox_inches='tight', dpi=300)
-            #plt.show()
+            axes = plt.gca()
+            abs_min_max = 0.26
+            axes.set_ylim([-abs_min_max, abs_min_max])
+            plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'),
+                        bbox_inches='tight', dpi=300)
+            # plt.show()
 
     def plot_regressor_results(self, val_name, color):
         name = 'Regressor {} results'.format(val_name)
@@ -250,7 +268,7 @@ class CurrencyPredictor:
             item.set_fontsize(18)
 
         plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'), bbox_inches='tight')
-        #plt.show()
+        # plt.show()
 
     def plot_last_predictions(self):
         for sum_dict in self.summary:
@@ -259,30 +277,32 @@ class CurrencyPredictor:
             print('Plotting last predictions of {}_{}.png'.format(name, self.currency))
 
             period_length = 8
-
-            delta = 2*period_length*self.prediction_period  # num_days - num_last_predictions
-            print(delta)
-
-            values_to_predict = self.x_df.drop(self.x_df.head(delta).index, inplace=False)  # self.x_df[-delta:]
-
+            points_we_can_remove = self.x_df.shape[0] - (2 * period_length * self.prediction_period)
+            # 384
+            # num_days - num_last_predictions
+            values_to_predict = self.x_df
+            # self.x_df.drop(self.x_df.head(delta).index, inplace=False)  # self.x_df[-delta:]
+            values_to_predict = values_to_predict.drop(values_to_predict.head(points_we_can_remove).index, inplace=False)
             regressor = sum_dict['regressor']
 
             forecast = regressor.predict(values_to_predict)
             original_cost_values = values_to_predict[['close']]
 
-            df = pd.DataFrame(columns=['Date', 'Close', 'Actual value', sum_dict['name'] + ' forecast', 'Prediction start'])
+            df = pd.DataFrame(
+                columns=['Date', 'Close', 'Actual value', sum_dict['name'] + ' forecast', 'Prediction start'])
 
             if not self.start_time_date:
                 start_time_date = datetime.now()
             else:
                 start_time_date = self.start_time_date
 
-            for i in range(0, 2*period_length*self.prediction_period, self.prediction_period):
+            for i in range(0, 2 * period_length * self.prediction_period, self.prediction_period):
 
                 if i == (period_length * self.prediction_period):
                     # Make all 3 graph end/start on same place for UI
-                    df.loc[i] = [start_time_date, original_cost_values['close'][i], original_cost_values['close'][i], original_cost_values['close'][i], original_cost_values['close'][i]]
-                elif i > period_length*self.prediction_period:
+                    df.loc[i] = [start_time_date, original_cost_values['close'][i], original_cost_values['close'][i],
+                                 original_cost_values['close'][i], original_cost_values['close'][i]]
+                elif i > period_length * self.prediction_period:
 
                     # if i - self.prediction_period <= 0:
                     #     print('HEERE')
@@ -290,12 +310,13 @@ class CurrencyPredictor:
                     #     df.loc[i] = [None, original_cost_values['close'][i], None, None]
                     # else:
                     #     df.loc[i] = [None, original_cost_values['close'][i], forecast[i - self.prediction_period], None] # Shifting forecast to actual close value
-                    df.loc[i] = [start_time_date, None, original_cost_values['close'][i], forecast[i-self.prediction_period], None]  # Shifting forecast to actual close value
+
+                    df.loc[i] = [start_time_date, None, original_cost_values['close'][i],
+                                 forecast[i - self.prediction_period], None]  # Shifting forecast to actual close value
                 else:
                     df.loc[i] = [start_time_date, original_cost_values['close'][i], None, None, None]
 
-                start_time_date = start_time_date + timedelta(hours=1*self.prediction_period)
-
+                start_time_date = start_time_date + timedelta(hours=1 * self.prediction_period)
 
             df.set_index('Date', inplace=True)
             df.plot(y='Actual value')
@@ -315,14 +336,16 @@ class CurrencyPredictor:
 
             ax.xaxis.set_major_formatter(mdates.DateFormatter(x_axis_format))
 
-            plt.title('Prediction vs actual for {}'.format(period_length, self.currency))
+            plt.title('Currency: {}, Prediction period: {}h. Prediction vs actual. '.format(self.currency,
+                                                                                            self.prediction_period))
 
             plt.legend()
             plt.xlabel(x_axis_name)
             plt.ylabel('Close')
-            plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'), bbox_inches='tight', dpi=300)
+            plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'),
+                        bbox_inches='tight', dpi=300)
             # plt.gcf().clear()
-            #plt.show()
+            # plt.show()
 
     def plot_feature_importance(self):
         for sum_dict in self.summary:
@@ -336,13 +359,13 @@ class CurrencyPredictor:
             else:
                 feature_importance = np.mean([tree.feature_importances_ for tree in regressor.estimators_], axis=0)
 
-            #feature_importance = np.asarray(sorted(feature_importance))
-            #if len(feature_importance) > 40:
-            #feature_importance = feature_importance[:10000]
-            #indices = np.argsort(feature_importance)[::-1]
-            #for f in range(self.x.shape[1]):
-                #print('%d. feature %d (%f)' % (f + 1, indices[f], feature_importance[indices[f]]))
-                #feature_importance[indices[f]]
+                # feature_importance = np.asarray(sorted(feature_importance))
+                # if len(feature_importance) > 40:
+                # feature_importance = feature_importance[:10000]
+                # indices = np.argsort(feature_importance)[::-1]
+                # for f in range(self.x.shape[1]):
+                # print('%d. feature %d (%f)' % (f + 1, indices[f], feature_importance[indices[f]]))
+                # feature_importance[indices[f]]
 
             # make importances relative to max importance
             feature_importance = 100.0 * (feature_importance / feature_importance.max())
@@ -354,22 +377,25 @@ class CurrencyPredictor:
             plt.figure(figsize=(10, 5))
             plt.subplot(1, 2, 2)
             pos = np.arange(sorted_idx.shape[0]) + .2
-            plt.barh(pos, feature_importance[sorted_idx], align='center',  color='coral')
+            plt.barh(pos, feature_importance[sorted_idx], align='center', color='coral')
             ax = plt.gca()
             ax.set_alpha(0.8)
 
             for i in ax.patches:
                 # get_width pulls left or right; get_y pushes up or down
-                ax.text(i.get_width() + 1, i.get_y() + .10, str(round((i.get_width() / feature_importance.max()) * 100, 4)) + '%', fontsize=7,
+                ax.text(i.get_width() + 1, i.get_y() + .10,
+                        str(round((i.get_width() / feature_importance.max()) * 100, 4)) + '%', fontsize=7,
                         color='dimgrey')
 
             plt.yticks(pos, self.feature_names[sorted_idx])
             plt.xlabel('Relative Importance')  # (feature_importance / max_feature_importance) * 100
-            plt.title(name)
+            plt.title('Currency: {}, Prediction period: {}h. Feature importance.'.format(self.currency,
+                                                                                        self.prediction_period))
 
-            plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'), bbox_inches='tight')
+            plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'),
+                        bbox_inches='tight')
             plt.gcf().clear()
-            #plt.show()
+            # plt.show()
 
     def plot_features(self, used_features, removed_features, cluster_currencies):
         name = 'Features'
@@ -381,8 +407,9 @@ class CurrencyPredictor:
         ax.axis('off')
         ax.axis('tight')
 
-        pd_dict = {'Features': used_features, 'Removed features': removed_features, 'Cluster currencies': cluster_currencies}
-        df = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in pd_dict.items() ]))
+        pd_dict = {'Features': used_features, 'Removed features': removed_features,
+                   'Cluster currencies': cluster_currencies}
+        df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in pd_dict.items()]))
         df.fillna(value=' ', inplace=True)
 
         ax.table(cellText=df.values, colLabels=df.columns, loc='center')
@@ -400,11 +427,19 @@ class CurrencyPredictor:
             R2 = sum_dict['R2']
             inc_cluster = 'yes' if len(self.cluster_currencies) > 0 else 'no'
 
-            df.loc[i] = [Regressor, self.prediction_period, MAE, MSE, R2, inc_cluster]
+            df.loc[i] = [Regressor,
+                         '{}h'.format(self.prediction_period),
+                         '{0:.4f}'.format(MAE),
+                         '{0:.4f}'.format(MSE),
+                         '{0:.4f}'.format(R2),
+                         inc_cluster]
 
-        with open('results.tex', 'a') as tf:
-            tf.write('\n prediction_period: {}, currency: {} \n'.format(self.prediction_period, self.currency))
-            tf.write(df.to_latex())
+        with open(self.image_dir + '/results.tex', 'a') as tf:
+            tf.write('\nprediction_period: {}, currency: {}'.format(self.prediction_period, self.currency))
+            best_regressor = self.get_best_regressor(print_it=False)
+            tf.write('\nBest regressor based on R2-MSE-MAE: {} - {}\n'.format(best_regressor['name'],
+                                                                              best_regressor['score']))
+            tf.write(df.to_latex(longtable=True))
 
     def get_best_regressor(self, print_it):
         highest_score_value = -1
@@ -450,11 +485,13 @@ class CurrencyPredictor:
         used_columns = list(set(list(self.df)) - set('date'))
         self.df[used_columns] = scale.fit_transform(self.df[used_columns])
 
-        self.df['close'].plot(figsize=(12,6),label='Close')
-        self.df['close'].rolling(window=self.num_days_of_data).mean().plot(label='{} Day Avg'.format(self.num_days_of_data))
+        self.df['close'].plot(figsize=(12, 6), label='Close')
+        self.df['close'].rolling(window=self.num_days_of_data).mean().plot(
+            label='{} Day Avg'.format(self.num_days_of_data))
         plt.legend()
         plt.title('avg_price_{}_days'.format(self.num_days_of_data))
-        plt.savefig('{}/avg_price_{}_days.png'.format(self.image_dir, self.num_days_of_data).replace(' ', '_'), bbox_inches='tight')
+        plt.savefig('{}/avg_price_{}_days.png'.format(self.image_dir, self.num_days_of_data).replace(' ', '_'),
+                    bbox_inches='tight')
         plt.gcf().clear()
         # plt.legend()
         # plt.show()
@@ -489,7 +526,8 @@ class CurrencyPredictor:
 
         return pd.DataFrame(list_of_currency_dicts)
 
-    def build_data_frame_dict_for_selected_currency(self, df, list_of_currency_dicts, selected_currency, date_list, cluster_currencies):
+    def build_data_frame_dict_for_selected_currency(self, df, list_of_currency_dicts, selected_currency, date_list,
+                                                    cluster_currencies):
 
         # df.drop(['name'], axis=1, inplace=True)
         headers = list(df.drop(['name'], axis=1, inplace=False))
@@ -497,7 +535,8 @@ class CurrencyPredictor:
 
         hour_counter = 0
 
-        country_list = ['US', 'CA', 'SG', 'CN', 'JP', 'KR', 'IN', 'GB', 'DE', 'FR', 'ZA', 'GH', 'NG', 'AU', 'VE', 'BR', 'KE', 'RU']
+        country_list = ['US', 'CA', 'SG', 'CN', 'JP', 'KR', 'IN', 'GB', 'DE', 'FR', 'ZA', 'GH', 'NG', 'AU', 'VE', 'BR',
+                        'KE', 'RU']
 
         for date_str in date_list:
             if hour_counter > len(list(df)):
@@ -528,15 +567,18 @@ class CurrencyPredictor:
                 new_dict['{}open'.format(prefix)] = currency_dict['open_{}'.format(str(hour_counter).zfill(4))]
                 new_dict['{}high'.format(prefix)] = currency_dict['high_{}'.format(str(hour_counter).zfill(4))]
                 new_dict['{}low'.format(prefix)] = currency_dict['low_{}'.format(str(hour_counter).zfill(4))]
-                new_dict['{}volume_to'.format(prefix)] = currency_dict['volume_to_{}'.format(str(hour_counter).zfill(4))]
-                new_dict['{}volume_from'.format(prefix)] = currency_dict['volume_from_{}'.format(str(hour_counter).zfill(4))]
+                new_dict['{}volume_to'.format(prefix)] = currency_dict[
+                    'volume_to_{}'.format(str(hour_counter).zfill(4))]
+                new_dict['{}volume_from'.format(prefix)] = currency_dict[
+                    'volume_from_{}'.format(str(hour_counter).zfill(4))]
 
                 for country in country_list:
                     if 'i_o_t_{}_{}'.format(country, str(hour_counter).zfill(4)) in currency_dict:
                         new_dict['{}interest_over_time_{}'.format(prefix, country)] = currency_dict[
                             'i_o_t_{}_{}'.format(country, str(hour_counter).zfill(4))]
 
-                num_tweets, num_retweets, tweet_exposure = self.get_twitter_data_points_from_hour(hour_counter, currency_dict)
+                num_tweets, num_retweets, tweet_exposure = self.get_twitter_data_points_from_hour(hour_counter,
+                                                                                                  currency_dict)
 
                 new_dict['{}num_tweets'.format(prefix)] = num_tweets
                 new_dict['{}num_retweets'.format(prefix)] = num_retweets
@@ -569,7 +611,8 @@ class CurrencyPredictor:
         else:
             day = 6
 
-        return currency_dict['tweets_{}'.format(day)], currency_dict['retweets_{}'.format(day)], currency_dict['exposure_{}'.format(day)]
+        return currency_dict['tweets_{}'.format(day)], currency_dict['retweets_{}'.format(day)], currency_dict[
+            'exposure_{}'.format(day)]
 
     def drop_unwanted_headers(self, df):
         for unwanted_header in self.headers_to_remove:
@@ -608,7 +651,18 @@ class CurrencyPredictor:
         concat_df = pd.concat([results_df, flags_df])
         concat_df.to_csv(results_path, index=False)
 
+
 if __name__ == '__main__':
+
+    # headers_to_remove = [
+    #     # 'high', 'interest_over_time_AU', 'interest_over_time_BR', 'interest_over_time_CA',
+    #     # 'interest_over_time_DE', 'interest_over_time_FR', 'interest_over_time_GB', 'interest_over_time_GH',
+    #     # 'interest_over_time_IN', 'interest_over_time_JP', 'interest_over_time_KE', 'interest_over_time_KR',
+    #     # 'interest_over_time_NG', 'interest_over_time_RU', 'interest_over_time_SG', 'interest_over_time_US',
+    #     # 'interest_over_time_VE', 'interest_over_time_ZA',  'interest_over_time_CN', 'low', 'num_retweets',
+    #     # 'num_tweets', 'open','tweet_exposure', 'volume_from', 'volume_to'
+    #                       ]
+    # cluster_currencies = []#['NEO', 'EOS', 'Dash', 'ICON']
 
     # TODO: Load automagically from column explanation.py
     # variable all_headers is not used
@@ -617,72 +671,90 @@ if __name__ == '__main__':
         'interest_over_time_DE', 'interest_over_time_FR', 'interest_over_time_GB', 'interest_over_time_GH',
         'interest_over_time_IN', 'interest_over_time_JP', 'interest_over_time_KE', 'interest_over_time_KR',
         'interest_over_time_NG', 'interest_over_time_RU', 'interest_over_time_SG', 'interest_over_time_US',
-        'interest_over_time_VE', 'interest_over_time_ZA',  'interest_over_time_CN', 'low', 'num_retweets',
-        'num_tweets', 'open','tweet_exposure', 'volume_from', 'volume_to'
+        'interest_over_time_VE', 'interest_over_time_ZA', 'interest_over_time_CN', 'low', 'num_retweets',
+        'num_tweets', 'open', 'tweet_exposure', 'volume_from', 'volume_to'
     ]
 
     data_files = ['crypto_data_week_9.csv',
                   'crypto_data_week_10.csv',
                   'crypto_data_week_11.csv',
-                  'crypto_data_week_13.csv',
-                  'crypto_data_week_14.csv'
+                  #'crypto_data_week_13.csv',
+                  #'crypto_data_week_14.csv'
                   ]
 
     start_time_date_week_number = datetime.strptime('2018-02-28 08:00:00.00', '%Y-%m-%d %H:%M:%S.%f')
 
-
-    headers_to_remove = [
-        # 'high', 'interest_over_time_AU', 'interest_over_time_BR', 'interest_over_time_CA',
-        # 'interest_over_time_DE', 'interest_over_time_FR', 'interest_over_time_GB', 'interest_over_time_GH',
-        # 'interest_over_time_IN', 'interest_over_time_JP', 'interest_over_time_KE', 'interest_over_time_KR',
-        # 'interest_over_time_NG', 'interest_over_time_RU', 'interest_over_time_SG', 'interest_over_time_US',
-        # 'interest_over_time_VE', 'interest_over_time_ZA',  'interest_over_time_CN', 'low', 'num_retweets',
-        # 'num_tweets', 'open','tweet_exposure', 'volume_from', 'volume_to'
-                          ]
-
-    used_features = list(filter(lambda a: a not in headers_to_remove and a not in 'date', all_headers))
-
-    # Note that higher prediction period gets higher accuracy if cluster currencies are appended to data set
-    # This increase in accuracy is not as big in when predition periods are smaller
-
-    cluster_currencies = []#['NEO', 'EOS', 'Dash', 'ICON']#'Litecoin', 'Ethereum Classic']#'Cardano', 'Monero', 'Bitcoin Gold', 'Qtum', 'Zcash']
-
     selected_currency = 'Bitcoin'
 
-    currency_predictor = CurrencyPredictor(currency=selected_currency,
-                                           data_files=data_files,
-                                           create_single_currency_data_set=True,
-                                           prediction_period=1,
-                                           start_time_date=start_time_date_week_number,
-                                           headers_to_remove=headers_to_remove,
-                                           cluster_currencies=cluster_currencies)
+    configurations = [
+        # Prediction: Bitcoin, 1 hour ahead, all Bitcoin features considered
+        {
+            'headers_to_remove': [],
+            'cluster_currencies': [],
+            'prediction_period': 1
+        },
+        # Prediction: Bitcoin, 1 hour ahead, all Bitcoin features and selected features
+        # from cluster currencies considered
+        {
+            'headers_to_remove': [],
+            'cluster_currencies': ['NEO', 'EOS', 'Dash', 'ICON'],
+            'prediction_period': 1
+        },
+        # Prediction: Bitcoin, 24 hours ahead, all features considered
+        {
+            'headers_to_remove': [],
+            'cluster_currencies': [],
+            'prediction_period': 24
+        },
+        # Prediction: Bitcoin, 24 hours ahead, all Bitcoin features and selected features
+        # from cluster currencies considered
+        {
+            'headers_to_remove': [],
+            'cluster_currencies': ['NEO', 'EOS', 'Dash', 'ICON'],
+            'prediction_period': 24
+        },
+    ]
 
-    currency_predictor.write_latex_table()
-    exit()
-    currency_predictor.plot_regressor_error()
-    print()
-    currency_predictor.plot_feature_importance()
-    print()
-    currency_predictor.plot_predictions()
-    print()
-    currency_predictor.plot_last_predictions()
-    print()
-    currency_predictor.plot_regressor_results(val_name='R2', color='#2D898B')
-    currency_predictor.plot_regressor_results(val_name='MAE', color='#3587A4')
-    currency_predictor.plot_regressor_results(val_name='MSE', color='#88CCF1')
-    currency_predictor.plot_regressor_results(val_name='score', color='#C3DFEE')
-    print()
-    currency_predictor.plot_features(used_features, headers_to_remove, cluster_currencies)
-    print()
+    for config in configurations:
+        headers_to_remove = config['headers_to_remove']
+        cluster_currencies = config['cluster_currencies']
+        prediction_period = config['prediction_period']
 
-    best_prediction_dict = currency_predictor.get_best_regressor(print_it=True)
-    print(22*'*' + ' BEST REGRESSOR ' + 22*'*')
-    print('Name: {}'.format(best_prediction_dict['name']))
-    print('R2: {0:.4f}'.format(best_prediction_dict['R2']))
-    print('MAE: {0:.4f}'.format(best_prediction_dict['MAE']))
-    print('MSE: {0:.4f}'.format(best_prediction_dict['MSE']))
-    print('{0:.3f}%'.format(best_prediction_dict['accuracy']))
-    print(60*'*')
+        used_features = list(filter(lambda a: a not in headers_to_remove and a not in 'date', all_headers))
 
-    print()
-    currency_predictor.write_result()
+        currency_predictor = CurrencyPredictor(currency=selected_currency,
+                                               data_files=data_files,
+                                               create_single_currency_data_set=True,
+                                               prediction_period=prediction_period,
+                                               start_time_date=start_time_date_week_number,
+                                               headers_to_remove=headers_to_remove,
+                                               cluster_currencies=cluster_currencies)
+
+        currency_predictor.write_latex_table()
+        currency_predictor.plot_regressor_error()
+        print()
+        currency_predictor.plot_feature_importance()
+        print()
+        currency_predictor.plot_predictions()
+        print()
+        currency_predictor.plot_last_predictions()
+        print()
+        currency_predictor.plot_regressor_results(val_name='R2', color='#2D898B')
+        currency_predictor.plot_regressor_results(val_name='MAE', color='#3587A4')
+        currency_predictor.plot_regressor_results(val_name='MSE', color='#88CCF1')
+        currency_predictor.plot_regressor_results(val_name='score', color='#C3DFEE')
+        print()
+        currency_predictor.plot_features(used_features, headers_to_remove, cluster_currencies)
+        print()
+
+        best_prediction_dict = currency_predictor.get_best_regressor(print_it=True)
+        print(22 * '*' + ' BEST REGRESSOR ' + 22 * '*')
+        print('Name: {}'.format(best_prediction_dict['name']))
+        print('R2: {0:.4f}'.format(best_prediction_dict['R2']))
+        print('MAE: {0:.4f}'.format(best_prediction_dict['MAE']))
+        print('MSE: {0:.4f}'.format(best_prediction_dict['MSE']))
+        print('{0:.3f}%'.format(best_prediction_dict['accuracy']))
+        print(60 * '*')
+
+        print()
+        currency_predictor.write_result()
