@@ -64,16 +64,14 @@ class DataPreprocessor:
             #self.normalize_testing_data_set()
 
             df, x_df_fin, feature_names = self.create_labels_based_on_prediction_period(df=df, prediction_period=prediction_period)
-            test_x_df_fin = self.create_testing_data(testing_df=testing_df, prediction_period=prediction_period)
+            test_x_df, test_df = self.create_testing_data(testing_df=testing_df, prediction_period=prediction_period)
 
-            #print(df.shape)
-            #print(x_df_fin.shape)
-            print(df['close'].max())
 
             data = {
                 'df': df,
                 'x_df': x_df_fin,
-                'test_x_df': test_x_df_fin,
+                'test_x_df': test_x_df,
+                'test_df': test_df,
                 'feature_names': feature_names,
                 'data_files': data_files,
                 'test_data_files': test_data_files,
@@ -96,7 +94,6 @@ class DataPreprocessor:
         return self.processed_data_list
 
     def normalize_all_data_sets(self):
-        #max, min = self.get_min_max_all_data_sets()
         max_values = dict()
         min_values = dict()
 
@@ -104,37 +101,36 @@ class DataPreprocessor:
             df = processed_data['df']
             x_df = processed_data['x_df']
             test_x_df = processed_data['test_x_df']
+            test_df = processed_data['test_df']
 
-           # print(list(df))
-            for header in list(set(list(df)+list(x_df)+list(test_x_df))):
+            for header in list(set(list(df)+list(x_df)+list(test_x_df)+list(test_df))):
                 if header == 'date':
                     continue
+                for data_frame in [df, test_df]:
+                    if header in max_values:
+                        curr_value = max_values[header]
+                        pos_new_val = data_frame[header].max()
 
+                        if curr_value < pos_new_val:
+                            max_values[header] = pos_new_val
 
-                if header in max_values:
-                    curr_value = max_values[header]
-                    pos_new_val = df[header].max()
+                    else:
+                        max_values[header] = data_frame[header].max()
 
-                    if curr_value < pos_new_val:
-                        max_values[header] = pos_new_val
+                    if header in min_values:
+                        curr_value = min_values[header]
+                        pos_new_val = data_frame[header].min()
 
-                else:
-                    max_values[header] = df[header].max()
-
-                if header in min_values:
-                    curr_value = min_values[header]
-                    pos_new_val = df[header].min()
-
-                    if curr_value > pos_new_val:
-                        min_values[header] = pos_new_val
-                else:
-                    min_values[header] = df[header].min()
-        #print(max_values)
+                        if curr_value > pos_new_val:
+                            min_values[header] = pos_new_val
+                    else:
+                        min_values[header] = data_frame[header].min()
 
         for processed_data in self.processed_data_list:
             df = processed_data['df']
             x_df = processed_data['x_df']
             test_x_df = processed_data['test_x_df']
+            test_df = processed_data['test_df']
 
             for header in list(set(list(df)+list(x_df)+list(test_x_df))):
                 if header == 'date':
@@ -147,31 +143,8 @@ class DataPreprocessor:
                             test_x_df[header] = (test_x_df[header] - min_values[header]) / (max_values[header] - min_values[header])
                         if header in list(df):
                             df[header] = (df[header] - min_values[header]) / (max_values[header] - min_values[header])
-
-        # print(max_values)
-        # print(min_values)
-        # exit()
-        #
-        # df_all = pd.DataFrame()
-        # for processed_data in self.processed_data_list:
-        #     df_all = pd.concat([df_all, processed_data['x_df']])
-        #     #print(df_all.shape)
-        #
-        # min = df_all.min()
-        # max = df_all.max()
-        #
-        # print(min)
-        # print(max)
-        #min_ = float('inf')
-        #max_ = -float('inf')
-
-        # for processed_data in self.processed_data_list:
-        #     x_df = processed_data['x_df']
-        #     test_x_df = processed_data['test_x_df']
-        #
-        #     processed_data['x_df'] = (x_df - min) / (max - min)
-        #     processed_data['test_x_df'] = (test_x_df - min) / (max - min)
-
+                        if header in list(test_df):
+                            test_df[header] = (test_df[header] - min_values[header]) / (max_values[header] - min_values[header])
 
     @staticmethod
     def create_labels_based_on_prediction_period(df, prediction_period):
@@ -193,7 +166,6 @@ class DataPreprocessor:
         feature_names = list(filter(lambda a: a != 'date', list(x_df)))
         feature_names = np.asarray(feature_names)
 
-
         return df, x_df,feature_names
 
     @staticmethod
@@ -205,43 +177,17 @@ class DataPreprocessor:
         testing_df.drop(testing_df.tail(prediction_period).index, inplace=True)
         test_x_df = testing_df.drop('Price_After_Period', axis=1)
 
-        return test_x_df
+        return test_x_df, testing_df
 
     def create_x_y(self):
         for processed_data in self.processed_data_list:
             df = processed_data['df']
             x_df = processed_data['x_df']
-            print(df.shape)
-            print(x_df.shape)
             x = df.loc[:, x_df.columns != 'date'].values.reshape(-1, len(list(x_df)))
             # self.y is only the y column
             y = df['Price_After_Period']
             processed_data['x'] = x
             processed_data['y'] = y
-
-    # def normalize_currency_data_set(self):
-    #     self.df.fillna(0.0, inplace=True)
-    #     # Normalize all columns except the date column
-    #     used_columns = list(set(list(self.df)) - set('date'))
-    #
-    #     global scaler
-    #     if scaler is None:
-    #         print('hei1')
-    #         print(self.df.shape)
-    #         scaler = MinMaxScaler()
-    #         scaler.fit(self.df[used_columns])
-    #         self.df[used_columns] = scaler.transform(self.df[used_columns])
-    #     else:
-    #         print('hei2')
-    #         print(self.df.shape)
-    #         self.df[used_columns] = scaler.transform(self.df[used_columns])
-
-
-    # def normalize_testing_data_set(self):
-    #     self.testing_df.fillna(0.0, inplace=True)
-    #     # Normalize all columns except the date column
-    #     used_columns = list(set(list(self.testing_df)) - set('date'))
-    #     self.testing_df[used_columns] = scaler.transform(self.testing_df[used_columns])
 
     def create_data_frame_for_currency(self, currency, data_files, cluster_currencies):
         data_file_count = 0
@@ -275,7 +221,6 @@ class DataPreprocessor:
 
     def build_data_frame_dict_for_selected_currency(self, df, list_of_currency_dicts, selected_currency, date_list,
                                                     cluster_currencies):
-
         # df.drop(['name'], axis=1, inplace=True)
         headers = list(df.drop(['name'], axis=1, inplace=False))
         currencies = df.set_index('name').T.to_dict('list')
@@ -402,7 +347,8 @@ class CurrencyPredictor:
                  x=None,
                  y=None,
                  x_df=None,
-                 test_x_df=None):
+                 test_x_df=None,
+                 test_df=None):
 
         np.set_printoptions(formatter={'float': '{: 0.3f}'.format}, threshold=np.nan)
 
@@ -410,16 +356,17 @@ class CurrencyPredictor:
         self.y = y
         self.x_df = x_df
         self.test_x_df = test_x_df
+        self.test_df = test_df
         self.feature_names = feature_names
         self.csv_dir = csv_dir
         self.summary = list()
 
         self.regressors = {
             # 'LinearRegression': LinearRegression(),
-            # ('Random Forest Regressor', 'RFR'): RandomForestRegressor(n_estimators=500, random_state=101),
-            # ('Gradient Boosting Regressor', 'GBR'): GradientBoostingRegressor(n_estimators=500, learning_rate=0.1),
-            # ('Bagging Regressor', 'BR'): BaggingRegressor(n_estimators=500),
-            # ('AdaBoost Regressor', 'ABR'): AdaBoostRegressor(n_estimators=500, learning_rate=0.1),
+            ('Random Forest Regressor', 'RFR'): RandomForestRegressor(n_estimators=500, random_state=101),
+            ('Gradient Boosting Regressor', 'GBR'): GradientBoostingRegressor(n_estimators=500, learning_rate=0.1),
+            ('Bagging Regressor', 'BR'): BaggingRegressor(n_estimators=500),
+            ('AdaBoost Regressor', 'ABR'): AdaBoostRegressor(n_estimators=500, learning_rate=0.1),
             ('Extra Tree Regressor', 'ETR'): ExtraTreesRegressor(n_estimators=500),
         }
         self.currency = currency
@@ -488,11 +435,16 @@ class CurrencyPredictor:
                 'score': r2 - mse - mae
             })
 
-    def plot_predictions(self):
+    def plot_predictions(self, with_untrained_data= False):
         for sum_dict in self.summary:
-            name = sum_dict['name'] + ' forecast'
+            if with_untrained_data:
+                name = sum_dict['name'] + ' forecast_on_untrained_data_set'
+                values_to_predict = self.test_x_df.copy()
+            else:
+                name = sum_dict['name'] + ' forecast'
+                values_to_predict = self.x_df.copy()
+
             print('Plotting {}_{}.png'.format(name, self.currency))
-            values_to_predict = self.x_df.copy()
             regressor = sum_dict['regressor']
 
             forecast = regressor.predict(values_to_predict)
@@ -504,6 +456,7 @@ class CurrencyPredictor:
                 if i - self.prediction_period <= 0:
                     plot_df.loc[i] = [original_cost_values['close'][i], None]
                 else:
+                    #  Shift forecast back in time again to plot "Now"
                     plot_df.loc[i] = [original_cost_values['close'][i], forecast[i - self.prediction_period]]
 
             plot_df.plot(figsize=(12, 6), label=name,
@@ -515,6 +468,38 @@ class CurrencyPredictor:
             plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'),
                         bbox_inches='tight', dpi=300)
             plt.gcf().clear()
+        # for sum_dict in self.summary:
+        #     name = sum_dict['name'] + ' forecast'
+        #     print('Plotting {}_{}.png'.format(name, self.currency))
+        #     orig_test_df = self.test_df.copy()
+        #
+        #     actual_values = orig_test_df['Price_After_Period']
+        #     actual_values.columns = ['date', 'Price_After_Period']
+        #
+        #     values_to_predict = orig_test_df.drop('Price_After_Period', axis=1, inplace=False)
+        #     regressor = sum_dict['regressor']
+        #
+        #     forecast = regressor.predict(values_to_predict)
+        #     original_cost_values = values_to_predict[['close']]
+        #
+        #     plot_df = pd.DataFrame(columns=['Close', sum_dict['name'] + ' forecast'])
+        #
+        #     for i in range(len(original_cost_values)):
+        #         if i - self.prediction_period <= 0:
+        #             plot_df.loc[i] = [actual_values.iloc[i], None]
+        #         else:
+        #             plot_df.loc[i] = [actual_values.iloc[i], forecast[i]]
+        #
+        #     plot_df.plot(figsize=(12, 6), label=name,
+        #                  title='Currency: {}, Prediction period: {}h. Forecast.'.format(self.currency,
+        #                                                                                 self.prediction_period))
+        #     plt.legend()
+        #     plt.xlabel('Hour')
+        #     plt.ylabel('Close')
+        #     plt.savefig('{}/{} {}.png'.format(self.image_dir, name, self.currency).replace(' ', '_'),
+        #                 bbox_inches='tight', dpi=300)
+        #     plt.gcf().clear()
+
 
             # plt.show()
 
@@ -617,7 +602,7 @@ class CurrencyPredictor:
 
         # plt.show()
 
-    def plot_last_predictions(self):
+    def plot_last_predictions(self, with_untrained_data=False):
         for sum_dict in self.summary:
 
             name = sum_dict['name'] + ' last predictions'
@@ -628,11 +613,17 @@ class CurrencyPredictor:
             # # 384
             # # num_days - num_last_predictions
             # values_to_predict = self.x_df
-            points_we_can_remove = self.test_x_df.shape[0] - (2 * period_length * self.prediction_period)
-            # num_days - num_last_predictions
-            values_to_predict = self.test_x_df
+            if with_untrained_data:
+                points_we_can_remove = self.test_x_df.shape[0] - (2 * period_length * self.prediction_period)
+                # num_days - num_last_predictions
+                values_to_predict = self.test_x_df
+            else:
+                points_we_can_remove = self.x_df.shape[0] - (2 * period_length * self.prediction_period)
+                # num_days - num_last_predictions
+                values_to_predict = self.x_df
+
             # self.x_df.drop(self.x_df.head(delta).index, inplace=False)  # self.x_df[-delta:]
-            values_to_predict = values_to_predict.drop(values_to_predict.tail(points_we_can_remove).index, inplace=False)
+            values_to_predict = values_to_predict.drop(values_to_predict.head(points_we_can_remove).index, inplace=False)
             regressor = sum_dict['regressor']
 
             forecast = regressor.predict(values_to_predict)
@@ -905,6 +896,7 @@ if __name__ == '__main__':
         y = processed_data['y']
         x_df = processed_data['x_df']
         test_x_df = processed_data['test_x_df']
+        test_df = processed_data['test_df']
         headers_to_remove = processed_data['headers_to_remove']
         cluster_currencies = processed_data['cluster_currencies']
         prediction_period = processed_data['prediction_period']
@@ -922,14 +914,18 @@ if __name__ == '__main__':
                                                x=x,
                                                y=y,
                                                x_df=x_df,
-                                               test_x_df=test_x_df)
+                                               test_x_df=test_x_df,
+                                               test_df=test_df)
 
         currency_predictor.write_latex_table()
         currency_predictor.plot_regressor_error()
         print()
         currency_predictor.plot_feature_importance()
         print()
-        currency_predictor.plot_predictions()
+        currency_predictor.plot_predictions(with_untrained_data=False)
+        print()
+        currency_predictor.plot_predictions(with_untrained_data=True)
+
         print()
         currency_predictor.plot_last_predictions()
         print()

@@ -1,9 +1,9 @@
 
 prediction_period: 24, currency: Bitcoin
-Best regressor based on R2-MSE-MAE: Extra Tree Regressor - 0.9654677828674194
+Best regressor based on R2-MSE-MAE: Extra Tree Regressor - 0.969799464626206
 \begin{longtable}{lllllll}
 \toprule
-{} &             Regressor & Prediction period &     MAE &     MSE &      R2 & Inc. cluster features \\
+{} &                    Regressor & Prediction period &     MAE &     MSE &      R2 & Inc. cluster features \\
 \midrule
 \endhead
 \midrule
@@ -13,5 +13,9 @@ Best regressor based on R2-MSE-MAE: Extra Tree Regressor - 0.9654677828674194
 
 \bottomrule
 \endlastfoot
-0 &  Extra Tree Regressor &               24h &  0.0226 &  0.0009 &  0.9889 &                   yes \\
+0 &      Random Forest Regressor &               24h &  0.0223 &  0.0009 &  0.9839 &                   yes \\
+1 &  Gradient Boosting Regressor &               24h &  0.0243 &  0.0010 &  0.9811 &                   yes \\
+2 &            Bagging Regressor &               24h &  0.0228 &  0.0009 &  0.9834 &                   yes \\
+3 &           AdaBoost Regressor &               24h &  0.0317 &  0.0015 &  0.9723 &                   yes \\
+4 &         Extra Tree Regressor &               24h &  0.0187 &  0.0006 &  0.9891 &                   yes \\
 \end{longtable}
